@@ -1,4 +1,5 @@
 import type { Exercise } from '../types';
+import { DETAIL } from './exerciseDetail';
 
 export const EXERCISES: Exercise[] = [
   // ── A. 어깨 준비운동 ─────────────────────────────
@@ -305,6 +306,8 @@ EXERCISES.push({
   tips: ['운동 직후 몸이 따뜻할 때 하면 잘 늘어납니다.', '시간이 없으면 가슴과 허벅지 앞쪽만이라도 해 주세요.'],
   mistakes: ['아플 때까지 세게 늘이는 것', '숨을 참는 것'],
 });
+
+for (const e of EXERCISES) if (DETAIL[e.id]) Object.assign(e, DETAIL[e.id]);
 
 export const EX_MAP: Record<string, Exercise> = Object.fromEntries(EXERCISES.map((e) => [e.id, e]));
 export const getEx = (id: string): Exercise | undefined => EX_MAP[id];
