@@ -50,6 +50,10 @@ export interface ItemLog {
   sets: SetLog[];
   level?: number;          // 추천 프로그램 단계(주차)
   hold?: 'miss' | 'pain';  // 단계를 올리지 않은 이유
+  test?: boolean;          // 테스트 데이의 최대 기록 항목
+  label?: string;          // 표시 이름(테스트 항목)
+  art?: ArtKey;            // 표시 도해(테스트 항목)
+  optional?: boolean;      // 선택 항목(안 해도 완료율에 영향 없음)
 }
 
 export type Condition = 'good' | 'tired' | 'pain';
@@ -78,6 +82,7 @@ export interface Settings {
   startDate: string;    // 적응기·프로그램 1주차 기준일
   goalDate: string;     // 목표일 (기본 12월 20일)
   autoProgram: boolean; // 추천 프로그램이 목표를 자동으로 정함
+  testDays: Record<string, 'upper' | 'full'>; // 테스트 데이
   firstPullup: { achieved: boolean; date?: string };
 }
 

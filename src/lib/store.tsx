@@ -5,6 +5,7 @@ import { getEx } from '../data/exercises';
 import { todayKey, weekday } from './date';
 import { ADD_AFTER, firstWeek, PROGRAM, stepAt } from '../data/program';
 import { levelFor, programWeek } from './progress';
+import { buildTestLog } from '../data/testday';
 
 const KEY = 'mingyu-routine:v1';
 
@@ -20,6 +21,7 @@ export function defaultState(): AppState {
       startDate: todayKey(),
       goalDate: '2026-12-20',
       autoProgram: true,
+      testDays: { '2026-11-02': 'upper', '2026-12-20': 'full' },
       firstPullup: { achieved: false },
     },
     schedule: defaultSchedule(),
@@ -36,7 +38,9 @@ function load(): AppState {
     // 추천 프로그램 도입 전에 만들어진 오늘 기록(아직 체크 전)은 새 목표로 다시 계산
     const t = todayKey();
     const tl = st.logs[t];
-    const stale = !tl?.items.some((i) => i.level) || tl?.items.some((i) => i.exerciseId === 'incline-pushup');
+    const isTest = !!st.settings.testDays?.[t];
+    const stale = isTest ? !tl?.items.some((i) => i.test)
+      : !tl?.items.some((i) => i.level) || tl?.items.some((i) => i.exerciseId === 'incline-pushup') || !tl?.items.some((i) => getEx(i.exerciseId)?.category === 'mobility');
     if (st.settings.autoProgram && tl && stale && !tl.items.some((i) => i.sets.some((x) => x.done))) {
       const logs = { ...st.logs };
       delete logs[t];
@@ -56,6 +60,11 @@ function migrateSchedule(schedule: AppState['schedule']): AppState['schedule'] {
       ...plan,
       items: plan.items.map((p) => (p.exerciseId === 'incline-pushup' ? { exerciseId: 'pushup', sets: 2, target: 6 } : p)),
     };
+    // 근력 운동 날인데 마무리 스트레칭이 없으면 맨 끝에 추가
+    const its = out[Number(k)].items;
+    const strength = its.some((p) => ['strength', 'pull'].includes(getEx(p.exerciseId)?.category ?? ''));
+    const hasCool = its.some((p) => getEx(p.exerciseId)?.category === 'mobility');
+    if (strength && !hasCool) out[Number(k)] = { ...out[Number(k)], items: [...its, { exerciseId: 'cooldown', sets: 1, target: 5 }] };
   }
   return out;
 }
@@ -68,7 +77,7 @@ export function normalize(data: unknown): AppState {
   if (s.logs && typeof s.logs !== 'object') throw new Error('기록 데이터 형식이 올바르지 않습니다.');
   return {
     version: 1,
-    settings: { ...d.settings, ...(s.settings ?? {}) },
+    settings: { ...d.settings, ...(s.settings ?? {}), testDays: { ...d.settings.testDays, ...(s.settings?.testDays ?? {}) } },
     schedule: migrateSchedule(s.schedule && typeof s.schedule === 'object' ? { ...d.schedule, ...s.schedule } : d.schedule),
     logs: s.logs ?? {},
     timer: s.timer ?? null,
@@ -80,6 +89,8 @@ const makeSets = (n: number, target: number) =>
 
 /** 일정 + (켜져 있으면) 추천 프로그램으로 그날의 기본 기록을 만듭니다. */
 export function buildDayLog(date: string, plan: DayPlan, state?: AppState): DayLog {
+  const testKind = state?.settings.testDays?.[date];
+  if (testKind) return buildTestLog(date, testKind, plan);
   const auto = !!state?.settings.autoProgram;
   const items: ItemLog[] = [];
   for (const p of plan.items) {
@@ -107,7 +118,7 @@ export function buildDayLog(date: string, plan: DayPlan, state?: AppState): DayL
 const hasDone = (log?: DayLog) => !!log?.items.some((i) => i.sets.some((s) => s.done));
 
 function withCompletion(log: DayLog): DayLog {
-  const sets = log.items.flatMap((i) => i.sets);
+  const sets = log.items.flatMap((i) => (i.optional ? i.sets.filter((s) => s.done) : i.sets));
   const all = sets.length > 0 && sets.every((s) => s.done);
   return { ...log, completedAt: all ? log.completedAt ?? Date.now() : undefined };
 }

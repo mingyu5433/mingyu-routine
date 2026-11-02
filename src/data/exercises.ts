@@ -243,7 +243,7 @@ export const EXERCISES: Exercise[] = [
   {
     id: 'light-stretch', name: '가벼운 스트레칭', part: '전신', category: 'mobility', art: 'stretch',
     unit: 'min', defaultSets: 1, defaultTarget: 10, restSec: 0,
-    summary: '걷기 후 몸을 풀어 주는 회복 시간',
+    summary: '걷기 후 몸을 풀어 주는 회복 시간 (마무리 스트레칭)',
     steps: ['종아리, 허벅지 앞뒤, 가슴, 어깨 순서로 부드럽게 늘입니다.', '부위마다 20~30초 정도 편하게 유지합니다.'],
     cautions: ['반동을 주지 않습니다.', '통증이 느껴지기 전에서 멈춥니다.'],
     breathing: '늘이는 동안 길게 내쉽니다.',
@@ -273,6 +273,23 @@ const MISTAKES: Record<string, string[]> = {
 };
 for (const e of EXERCISES) e.mistakes = MISTAKES[e.id];
 
+EXERCISES.push({
+  id: 'cooldown', name: '마무리 스트레칭', part: '가슴 · 등 · 하체', category: 'mobility', art: 'stretch',
+  unit: 'min', defaultSets: 1, defaultTarget: 5, restSec: 0,
+  summary: '운동 후 숨을 고르고 사용한 근육을 부드럽게 늘이는 시간',
+  steps: [
+    '문틀 가슴 스트레칭: 좌우 20~30초, 가슴 앞쪽이 부드럽게 늘어나는 정도로만',
+    '등 · 옆구리: 두 팔을 머리 위로 뻗고 옆으로 천천히 기울이기, 좌우 20초',
+    '허벅지 앞: 서서 한쪽 발목을 잡고 뒤로 당기기, 좌우 20초',
+    '허벅지 뒤 · 엉덩이: 바닥에 앉아 한쪽 다리를 뻗고 상체를 숙이기, 좌우 20초',
+    '마지막으로 천천히 깊게 다섯 번 호흡하기',
+  ],
+  cautions: ['반동을 주지 않습니다.', '어깨 앞쪽에 통증이 느껴지면 범위를 줄이거나 중단합니다.'],
+  breathing: '늘이는 동안 길게 내쉽니다.',
+  tips: ['운동 직후 몸이 따뜻할 때 하면 잘 늘어납니다.', '시간이 없으면 가슴과 허벅지 앞쪽만이라도 해 주세요.'],
+  mistakes: ['아플 때까지 세게 늘이는 것', '숨을 참는 것'],
+});
+
 export const EX_MAP: Record<string, Exercise> = Object.fromEntries(EXERCISES.map((e) => [e.id, e]));
 export const getEx = (id: string): Exercise | undefined => EX_MAP[id];
 
@@ -281,7 +298,7 @@ export const CATEGORY_LABEL: Record<Exercise['category'], string> = {
   strength: '근력',
   pull: '풀업',
   cardio: '유산소',
-  mobility: '회복',
+  mobility: '마무리',
 };
 
 export function formatTarget(ex: Exercise, target: number): string {

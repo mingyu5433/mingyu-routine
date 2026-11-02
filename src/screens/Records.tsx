@@ -224,6 +224,9 @@ function StatsView() {
         </p>
       </Card>
 
+      {/* 테스트 기록 */}
+      <TestCompare />
+
       {/* 첫 풀업 */}
       <SectionTitle>첫 풀업</SectionTitle>
       <Card className={`p-5 ${fp.achieved ? 'border-primary' : ''}`}>
@@ -329,7 +332,7 @@ function DayDetail({ date, onClose }: { date: string | null; onClose: () => void
               if (!ex) return null;
               return (
                 <li key={i} className="rounded-sm border border-hairline p-3.5">
-                  <p className="text-[15px] font-semibold">{ex.name}</p>
+                  <p className="text-[15px] font-semibold">{it.label ?? ex.name}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {it.sets.map((s, j) => (
                       <span key={j} className={`tabular rounded-full px-2.5 py-1 text-[12px] font-medium ${s.done ? 'bg-primary-tint text-primary' : 'bg-strong text-muted-soft'}`}>
@@ -344,6 +347,51 @@ function DayDetail({ date, onClose }: { date: string | null; onClose: () => void
         </div>
       )}
     </Sheet>
+  );
+}
+
+/** 테스트 데이 결과 비교 (11/2 → 12/20) */
+function TestCompare() {
+  const { state } = useStore();
+  const days = Object.entries(state.settings.testDays ?? {}).map(([d]) => d).sort();
+  if (days.length === 0) return null;
+  const rows: { label: string; exId: string; vals: (number | null)[] }[] = [];
+  for (const [di, d] of days.entries()) {
+    for (const it of state.logs[d]?.items ?? []) {
+      if (!it.test) continue;
+      let r = rows.find((x) => x.label === it.label);
+      if (!r) { r = { label: it.label ?? '', exId: it.exerciseId, vals: days.map(() => null) }; rows.push(r); }
+      if (it.sets[0]?.done) r.vals[di] = it.sets[0].actual;
+    }
+  }
+  return (
+    <>
+      <SectionTitle>테스트 기록</SectionTitle>
+      <Card>
+        <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 border-b border-hairline-soft px-4 py-2.5 text-[12px] font-semibold text-muted">
+          <span>항목</span>
+          {days.map((d) => <span key={d} className="tabular w-14 text-right">{parts(d).m}/{parts(d).d}</span>)}
+        </div>
+        {rows.length === 0 ? (
+          <p className="px-4 py-4 text-[14px] text-muted">테스트 데이에 기록한 숫자가 여기에 나란히 표시됩니다.</p>
+        ) : rows.map((r) => {
+          const ex = getEx(r.exId);
+          const [a, b] = [r.vals[0], r.vals[r.vals.length - 1]];
+          const up = days.length > 1 && a !== null && b !== null ? b - a : null;
+          return (
+            <div key={r.label} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 border-b border-hairline-soft px-4 py-3 last:border-0">
+              <span className="min-w-0 text-[14px] font-medium">{r.label.replace(' 최대', '')}
+                {up !== null && up !== 0 && <span className={`ml-1.5 text-[12px] font-semibold ${up > 0 ? 'text-primary' : 'text-muted'}`}>{up > 0 ? `+${up}` : up}</span>}
+              </span>
+              {r.vals.map((v, i) => (
+                <span key={i} className="tabular w-14 text-right text-[15px] font-semibold">{v === null ? <span className="text-muted-soft">–</span> : `${v}${ex ? unitLabel(ex) : ''}`}</span>
+              ))}
+            </div>
+          );
+        })}
+      </Card>
+      <p className="mt-2 px-1 text-[12px] text-muted">같은 방식으로 잰 숫자끼리 비교해야 정확합니다. 재테스트도 바른 자세 기준으로 재 주세요.</p>
+    </>
   );
 }
 

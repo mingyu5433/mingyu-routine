@@ -5,7 +5,7 @@ import { addDays, diffDays, weekStart, weekday } from './date';
 import { restFor } from './store';
 
 export const daySets = (log?: DayLog) => {
-  const sets = log?.items.flatMap((i) => i.sets) ?? [];
+  const sets = log?.items.flatMap((i) => (i.optional ? i.sets.filter((s) => s.done) : i.sets)) ?? [];
   return { total: sets.length, done: sets.filter((s) => s.done).length };
 };
 

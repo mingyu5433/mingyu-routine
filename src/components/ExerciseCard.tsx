@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Pause, Pencil, Plus, Settings2, Sparkles, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, Gauge, Pause, Pencil, Plus, Settings2, Sparkles, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ItemLog } from '../types';
 import { CATEGORY_LABEL, formatTarget, getEx, unitLabel } from '../data/exercises';
@@ -28,23 +28,24 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
   const [draft, setDraft] = useState(0);
   if (!ex) return null;
 
+  const isTest = !!item.test;
   const done = item.sets.filter((s) => s.done).length;
   const total = item.sets.length;
   const complete = done === total;
   const target = item.sets[0]?.target ?? ex.defaultTarget;
   const sameTarget = item.sets.every((s) => s.target === target);
-  const goal = `${total}세트 × ${sameTarget ? formatTarget(ex, target) : '세트별 목표'}`;
+  const goal = isTest ? (complete ? `기록 ${formatTarget(ex, item.sets[0].actual)}` : '1세트 · 바른 자세로 가능한 최대') : `${total}세트 × ${sameTarget ? formatTarget(ex, target) : '세트별 목표'}`;
   const step = item.level ? stepAt(ex.id, item.level) : null;
   const u = unitLabel(ex);
 
-  const startEdit = (j: number) => { setEditing(j); setDraft(item.sets[j].done ? item.sets[j].actual : item.sets[j].target); };
+  const startEdit = (j: number) => { setEditing(j); setDraft(item.sets[j].done ? item.sets[j].actual : isTest ? ex.defaultTarget : item.sets[j].target); };
 
   return (
     <article id={id} className={`scroll-mt-4 overflow-hidden rounded-md border bg-canvas transition-shadow ${open ? 'border-hairline shadow-float' : 'border-hairline'}`}>
       <button type="button" onClick={() => onOpenChange(!open)} aria-expanded={open}
         className="flex w-full items-center gap-3.5 p-3 text-left">
         <div className={`relative grid h-[68px] w-[84px] shrink-0 place-items-center rounded-sm ${complete ? 'bg-primary-tint text-primary' : 'bg-soft text-ink'}`}>
-          <ExerciseArt art={variantArt(ex.id, item.level) ?? ex.art} className="h-[54px] w-[76px]" />
+          <ExerciseArt art={item.art ?? variantArt(ex.id, item.level) ?? ex.art} className="h-[54px] w-[76px]" />
           {complete && (
             <span className="animate-pop absolute -right-1.5 -top-1.5 grid h-6 w-6 place-items-center rounded-full bg-primary text-on-primary">
               <Check size={14} strokeWidth={3} />
@@ -53,11 +54,11 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
         </div>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-1.5">
-            <span className="text-[12px] font-bold text-muted">{CATEGORY_LABEL[ex.category]}</span>
+            <span className={`text-[12px] font-bold ${isTest ? 'text-primary' : 'text-muted'}`}>{isTest ? (item.optional ? '테스트 · 선택' : '테스트') : CATEGORY_LABEL[ex.category]}</span>
             <span className="text-[12px] text-muted-soft">·</span>
             <span className="truncate text-[12px] text-muted">{ex.part}</span>
           </div>
-          <h3 className={`text-[16px] font-semibold leading-tight ${complete ? 'text-muted' : ''}`}>{variantName(ex.name, ex.id, item.level)}</h3>
+          <h3 className={`text-[16px] font-semibold leading-tight ${complete ? 'text-muted' : ''}`}>{item.label ?? variantName(ex.name, ex.id, item.level)}</h3>
           <p className="mt-1 text-[14px] text-muted tabular">{goal}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -71,6 +72,12 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
 
       {open && (
         <div className="border-t border-hairline-soft px-3 pb-3">
+          {isTest && (
+            <div className="mt-3 rounded-sm bg-primary-tint px-3 py-2.5 text-[13px] leading-[1.5] text-primary">
+              <p className="flex items-center gap-1.5 font-semibold"><Gauge size={13} />한 번만, 바른 자세로 가능한 만큼</p>
+              <p className="mt-0.5">자세가 무너지거나 어깨가 불편해지는 순간 멈추고, 그때까지의 숫자를 기록하세요.{item.optional ? ' 일반 푸쉬업이 5개 이상이면 건너뛰어도 됩니다.' : ''}</p>
+            </div>
+          )}
           {/* 추천 프로그램 안내 */}
           {item.level && (
             <div className="mt-3 rounded-sm bg-soft px-3 py-2.5 text-[13px] leading-[1.5]">
@@ -87,12 +94,12 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
           {/* 세트: 체크 + 수정 */}
           <ul className="divide-y divide-hairline-soft">
             {item.sets.map((s, j) => {
-              const diff = s.done ? s.actual - s.target : 0;
+              const diff = s.done && !isTest ? s.actual - s.target : 0;
               if (editing === j) {
                 return (
                   <li key={j} className="animate-rise py-3">
-                    <p className="text-[14px] font-semibold">{j + 1}세트 · 실제로 몇 {u} 했나요?</p>
-                    <p className="text-[12px] text-muted">목표 {formatTarget(ex, s.target)} · 덜 했거나 더 했으면 그대로 적어 주세요</p>
+                    <p className="text-[14px] font-semibold">{isTest ? `최대 몇 ${u} 했나요?` : `${j + 1}세트 · 실제로 몇 ${u} 했나요?`}</p>
+                    <p className="text-[12px] text-muted">{isTest ? '숫자를 눌러 직접 입력해도 됩니다' : `목표 ${formatTarget(ex, s.target)} · 덜 했거나 더 했으면 그대로 적어 주세요`}</p>
                     <div className="mt-2.5 flex items-center justify-between gap-2">
                       <Stepper value={draft} min={0} max={999} suffix={u} onChange={setDraft} />
                       <div className="flex gap-1.5">
@@ -107,15 +114,15 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
               }
               return (
                 <li key={j} className="flex items-center gap-3 py-2.5">
-                  <button type="button" onClick={() => onToggle(j)} aria-pressed={s.done}
+                  <button type="button" onClick={() => (isTest && !s.done ? startEdit(j) : onToggle(j))} aria-pressed={s.done}
                     aria-label={`${j + 1}세트 ${s.done ? '완료 해제' : '완료'}`}
                     className={`grid h-11 w-11 shrink-0 place-items-center rounded-full border-2 transition-colors ${s.done ? 'border-primary bg-primary text-on-primary' : 'border-border-strong text-transparent'}`}>
                     <Check size={20} strokeWidth={3} className={s.done ? 'animate-pop' : ''} />
                   </button>
                   <div className="min-w-0 flex-1">
                     <p className="tabular text-[16px] font-semibold">
-                      <span className="mr-1.5 text-[13px] font-medium text-muted">{j + 1}세트</span>
-                      {formatTarget(ex, s.done ? s.actual : s.target)}
+                      <span className="mr-1.5 text-[13px] font-medium text-muted">{isTest ? '기록' : `${j + 1}세트`}</span>
+                      {isTest && !s.done ? '최대' : formatTarget(ex, s.done ? s.actual : s.target)}
                       {diff !== 0 && (
                         <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${diff > 0 ? 'bg-primary-tint text-primary' : 'bg-strong text-muted'}`}>
                           {diff > 0 ? `+${diff}` : diff}
@@ -123,7 +130,7 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
                       )}
                     </p>
                     <p className="tabular text-[12px] text-muted">
-                      {s.done ? `${s.doneAt ? timeLabel(s.doneAt) + ' 완료' : '완료'}${diff !== 0 ? ` · 목표 ${formatTarget(ex, s.target)}` : ''}` : '다 하면 체크'}
+                      {s.done ? `${s.doneAt ? timeLabel(s.doneAt) + ' 완료' : '완료'}${diff !== 0 ? ` · 목표 ${formatTarget(ex, s.target)}` : ''}` : isTest ? '하고 나서 기록 버튼으로 입력' : '다 하면 체크'}
                     </p>
                   </div>
                   {manage ? (
@@ -135,7 +142,7 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
                   ) : (
                     <button type="button" onClick={() => startEdit(j)}
                       className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-hairline px-3 text-[13px] font-medium">
-                      <Pencil size={12} /> 수정
+                      <Pencil size={12} /> {isTest && !s.done ? '기록' : '수정'}
                     </button>
                   )}
                 </li>
@@ -158,10 +165,10 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
           </button>
           {info && <div className="px-1 pb-1 pt-4"><ExerciseInfo ex={ex} /></div>}
 
-          <button type="button" onClick={() => { setManage((v) => !v); setEditing(null); }}
+          {!isTest && <button type="button" onClick={() => { setManage((v) => !v); setEditing(null); }}
             className="mx-auto mt-3 flex items-center gap-1 text-[12px] text-muted underline-offset-2 active:underline">
             <Settings2 size={12} /> {manage ? '목표 조정 끝내기' : '오늘 목표 · 세트 수 직접 조정'}
-          </button>
+          </button>}
         </div>
       )}
     </article>

@@ -12,6 +12,7 @@ import { ExerciseCard } from '../components/ExerciseCard';
 import { ChangePreviewSheet, MotivationSheet } from '../components/Boost';
 import { Card, Chip, ProgressBar, Segmented, SectionTitle } from '../components/ui';
 import { haptic, unlockAudio } from '../lib/feedback';
+import { TEST_REST_SEC } from '../data/testday';
 import type { Condition } from '../types';
 
 const CONDITION_MSG: Record<Condition, string | null> = {
@@ -43,7 +44,9 @@ export function TodayScreen() {
   const g = parts(goal);
 
   const warmups = log.items.map((it, i) => ({ it, i })).filter(({ it }) => getEx(it.exerciseId)?.category === 'warmup');
-  const mains = log.items.map((it, i) => ({ it, i })).filter(({ it }) => getEx(it.exerciseId)?.category !== 'warmup');
+  const mains = log.items.map((it, i) => ({ it, i })).filter(({ it }) => !['warmup', 'mobility'].includes(getEx(it.exerciseId)?.category ?? ''));
+  const cools = log.items.map((it, i) => ({ it, i })).filter(({ it }) => getEx(it.exerciseId)?.category === 'mobility');
+  const isTestDay = log.items.some((it) => it.test);
   const firstOpen = log.items.findIndex((it) => it.sets.some((s) => !s.done));
   const isRest = log.items.length === 0;
   const [openSet, setOpenSet] = useState<Set<number>>(() => new Set([firstOpen]));
@@ -75,7 +78,8 @@ export function TodayScreen() {
       const next = log.items.findIndex((it, k) => k !== i && it.sets.some((s) => !s.done));
       if (next >= 0) setOpenSet((prev) => { const n = new Set(prev); n.delete(i); n.add(next); return n; });
     }
-    store.startTimer(restFor(ex.id, state.settings), nextInSame ? `${ex.name} 다음 세트까지` : '다음 운동까지');
+    const isTestItem = !!log.items[i].test;
+    store.startTimer(isTestItem ? TEST_REST_SEC : restFor(ex.id, state.settings), isTestItem ? '다음 테스트까지 충분히 쉬기' : nextInSame ? `${ex.name} 다음 세트까지` : '다음 운동까지');
   };
 
   const toggle = (i: number, j: number) => {
@@ -180,15 +184,15 @@ export function TodayScreen() {
             )}
 
             <div className="mt-6 border-t border-hairline-soft pt-4">
-              <p className="mb-2 text-[14px] font-semibold">{state.settings.autoProgram ? '오늘 해야 할 것 (추천)' : '오늘의 목표'}</p>
+              <p className="mb-2 text-[14px] font-semibold">{isTestDay ? '오늘 잴 것 (각 1번씩)' : state.settings.autoProgram ? '오늘 해야 할 것 (추천)' : '오늘의 목표'}</p>
               <ul className="space-y-1.5 text-[14px]">
                 {mains.map(({ it }) => {
                   const ex = getEx(it.exerciseId)!;
                   const ok = it.sets.every((s) => s.done);
                   return (
-                    <li key={it.exerciseId} className="flex justify-between gap-3">
-                      <span className={ok ? 'text-muted line-through' : 'text-body'}>{variantName(ex.name, ex.id, it.level)}</span>
-                      <span className="tabular shrink-0 text-muted">{it.sets.length}세트 × {formatTarget(ex, it.sets[0]?.target ?? 0)}</span>
+                    <li key={`${it.exerciseId}-${it.label ?? ''}`} className="flex justify-between gap-3">
+                      <span className={ok ? 'text-muted line-through' : 'text-body'}>{it.label ?? variantName(ex.name, ex.id, it.level)}</span>
+                      <span className="tabular shrink-0 text-muted">{it.test ? (ok ? formatTarget(ex, it.sets[0].actual) : '최대') : `${it.sets.length}세트 × ${formatTarget(ex, it.sets[0]?.target ?? 0)}`}</span>
                     </li>
                   );
                 })}
@@ -218,9 +222,21 @@ export function TodayScreen() {
             )}
           </div>
 
-          <p className="mt-6 rounded-sm bg-soft px-3.5 py-3 text-[13px] leading-[1.55] text-body">
-            <b className="text-ink">하는 방법</b> · 세트를 끝내면 동그라미를 누르세요. 목표보다 덜 했거나 더 했다면 옆의 <b className="text-ink">수정</b>을 눌러 실제 횟수를 적으면 됩니다.
-          </p>
+          {isTestDay ? (
+            <div className="mt-6 rounded-sm bg-soft px-3.5 py-3 text-[13px] leading-[1.6] text-body">
+              <p className="font-semibold text-ink">테스트 데이 하는 방법</p>
+              <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+                <li>준비운동을 평소대로 합니다.</li>
+                <li>테스트는 항목마다 <b className="text-ink">한 번씩만</b>, 사이에 2~3분 쉽니다.</li>
+                <li>짜내지 말고 <b className="text-ink">바른 자세로 가능한 마지막 횟수</b>에서 멈춥니다. 어깨가 불편하면 바로 중단합니다.</li>
+                <li>끝나면 <b className="text-ink">기록</b> 버튼으로 숫자를 적고, 마무리 스트레칭으로 끝냅니다.</li>
+              </ol>
+            </div>
+          ) : (
+            <p className="mt-6 rounded-sm bg-soft px-3.5 py-3 text-[13px] leading-[1.55] text-body">
+              <b className="text-ink">하는 방법</b> · 세트를 끝내면 동그라미를 누르세요. 목표보다 덜 했거나 더 했다면 옆의 <b className="text-ink">수정</b>을 눌러 실제 횟수를 적으면 됩니다.
+            </p>
+          )}
 
           {warmups.length > 0 && (
             <>
@@ -230,8 +246,14 @@ export function TodayScreen() {
           )}
           {mains.length > 0 && (
             <>
-              <SectionTitle right={<span className="text-[13px] text-muted">{mains.length}개</span>}>본 운동</SectionTitle>
+              <SectionTitle right={<span className="text-[13px] text-muted">{mains.length}개</span>}>{isTestDay ? '테스트' : '본 운동'}</SectionTitle>
               <div className="space-y-3">{mains.map(card)}</div>
+            </>
+          )}
+          {cools.length > 0 && (
+            <>
+              <SectionTitle right={<span className="text-[13px] text-muted">약 {cools.reduce((a, { it }) => a + (getEx(it.exerciseId)?.unit === 'min' ? it.sets[0]?.target ?? 0 : 0), 0)}분</span>}>마무리 스트레칭</SectionTitle>
+              <div className="space-y-3">{cools.map(card)}</div>
             </>
           )}
         </>
