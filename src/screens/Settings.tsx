@@ -44,6 +44,16 @@ export function SettingsScreen({ onEditSchedule }: { onEditSchedule: () => void 
         ]}
       />
 
+      <SectionTitle>나에게 한 마디</SectionTitle>
+      <Card className="p-4">
+        <p className="text-[13px] leading-[1.5] text-muted">모든 화면 맨 아래에 보입니다. 비워 두면 동기부여 문장이 무작위로 나옵니다.</p>
+        <textarea value={s.selfNote ?? ''} maxLength={80} rows={2}
+          onChange={(e) => updateSettings({ selfNote: e.target.value })}
+          placeholder="예: 민규야, 12월 20일의 너는 지금의 너에게 고마워할 거다."
+          className="mt-2.5 w-full resize-none rounded-sm border border-hairline bg-canvas px-3.5 py-3 text-[15px] leading-[1.5] outline-none focus:border-2 focus:border-ink" />
+        <p className="mt-1 text-right text-[11px] text-muted-soft tabular">{(s.selfNote ?? '').length}/80</p>
+      </Card>
+
       <SectionTitle>휴식 타이머</SectionTitle>
       <Card>
         <Row title="일반 운동" desc="세트 완료 후 자동 시작">
@@ -118,7 +128,6 @@ export function SettingsScreen({ onEditSchedule }: { onEditSchedule: () => void 
         <p className="mt-3 flex items-center gap-1.5 text-[12px] text-muted"><SmartphoneNfc size={13} />한 번 열어 두면 오프라인에서도 실행됩니다.</p>
       </Card>
 
-      <p className="mt-10 text-center text-[12px] text-muted-soft">민규 루틴 v1.1 · 광고 없음 · 회원가입 없음</p>
     </div>
   );
 }

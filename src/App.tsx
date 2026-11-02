@@ -6,6 +6,7 @@ import { WorkoutScreen } from './screens/Workout';
 import { RecordsScreen } from './screens/Records';
 import { SettingsScreen } from './screens/Settings';
 import { RestTimer } from './components/RestTimer';
+import { Footer } from './components/Footer';
 
 type Tab = 'today' | 'workout' | 'records' | 'settings';
 const TABS: { id: Tab; label: string; icon: typeof Dumbbell }[] = [
@@ -43,6 +44,7 @@ export default function App() {
         {tab === 'workout' && <WorkoutScreen />}
         {tab === 'records' && <RecordsScreen />}
         {tab === 'settings' && <SettingsScreen onEditSchedule={() => setTab('workout')} />}
+        <Footer key={tab} tab={tab} />
       </main>
 
       <RestTimer />
