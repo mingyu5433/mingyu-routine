@@ -10,6 +10,7 @@ import { WEEK_FOCUS, PROGRAM_WEEKS, variantName } from '../data/program';
 import { WEEKDAYS } from '../data/schedule';
 import { ExerciseCard } from '../components/ExerciseCard';
 import { ChangePreviewSheet, MotivationSheet } from '../components/Boost';
+import { BackupReminder, MonthlyRecap } from '../components/Backup';
 import { Card, Chip, ProgressBar, Segmented, SectionTitle } from '../components/ui';
 import { haptic, unlockAudio } from '../lib/feedback';
 import { TEST_REST_SEC } from '../data/testday';
@@ -148,6 +149,9 @@ export function TodayScreen() {
         </div>
         <p className="mt-3 flex items-center justify-end gap-0.5 text-[13px] font-medium opacity-80">한 달 · 크리스마스 · 세 달 뒤 변화 보기 <ChevronRight size={14} /></p>
       </button>
+
+      <MonthlyRecap />
+      <BackupReminder />
 
       {isRest ? (
         <Card className="mt-4 p-6">

@@ -1,7 +1,9 @@
-import { CalendarDays, ChevronRight, Download, Moon, Share, SmartphoneNfc, Sun, SunMoon, Trash2, Upload } from 'lucide-react';
+import { CalendarDays, ChevronRight, Moon, Share, SmartphoneNfc, Sun, SunMoon, Trash2, Upload } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
 import { defaultState, normalize, useStore } from '../lib/store';
 import { todayKey } from '../lib/date';
+import { BackupButton } from '../components/Backup';
+import { daysSince } from '../lib/backup';
 import { Card, SectionTitle, Segmented, Stepper, Toggle } from '../components/ui';
 import type { Settings } from '../types';
 
@@ -11,18 +13,7 @@ export function SettingsScreen({ onEditSchedule }: { onEditSchedule: () => void 
   const fileRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const exportJson = () => {
-    const blob = new Blob([JSON.stringify({ ...state, timer: null, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `mingyu-routine-backup-${todayKey()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setMsg('백업 파일을 저장했습니다.');
-  };
+  const since = daysSince(s.lastBackupAt);
 
   const importJson = async (file: File) => {
     try {
@@ -88,13 +79,21 @@ export function SettingsScreen({ onEditSchedule }: { onEditSchedule: () => void 
         </Row>
       </Card>
 
+      <SectionTitle>백업 · 복원</SectionTitle>
+      <Card className="p-4">
+        <p className="text-[15px] font-semibold">마지막 백업: {since === null ? '아직 없음' : since === 0 ? '오늘' : `${since}일 전`}</p>
+        <ol className="mt-2 list-decimal space-y-1 pl-4 text-[13px] leading-[1.55] text-body">
+          <li><b className="text-ink">지금 백업하기</b>를 누르면 공유 창이 열립니다.</li>
+          <li><b className="text-ink">파일에 저장 → iCloud Drive</b>를 고르고 저장합니다.</li>
+          <li>휴대폰을 바꾸면 새 휴대폰에서 이 앱을 홈 화면에 추가한 뒤, 아래 <b className="text-ink">백업 가져오기</b>로 그 파일을 선택합니다.</li>
+        </ol>
+        <BackupButton className="mt-3" />
+      </Card>
+
       <SectionTitle>데이터</SectionTitle>
       <Card>
-        <button onClick={exportJson} className="flex w-full items-center gap-3 border-b border-hairline-soft px-4 py-4 text-left">
-          <Download size={18} /><span className="flex-1 text-[15px] font-medium">JSON으로 내보내기</span>
-        </button>
         <button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-3 border-b border-hairline-soft px-4 py-4 text-left">
-          <Upload size={18} /><span className="flex-1 text-[15px] font-medium">JSON 백업 가져오기</span>
+          <Upload size={18} /><span className="flex-1 text-[15px] font-medium">백업 가져오기 (복원)</span>
         </button>
         <button onClick={() => {
           if (confirm('모든 기록과 설정을 삭제합니다. 먼저 백업을 내보내셨나요?') && confirm('정말 초기화할까요? 되돌릴 수 없습니다.')) {
@@ -107,7 +106,7 @@ export function SettingsScreen({ onEditSchedule }: { onEditSchedule: () => void 
       <input ref={fileRef} type="file" accept="application/json,.json" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) void importJson(f); e.target.value = ''; }} />
       {msg && <p className="mt-2 px-1 text-[13px] text-muted">{msg}</p>}
-      <p className="mt-2 px-1 text-[12px] leading-[1.5] text-muted">기록은 이 기기의 브라우저 저장소에만 보관됩니다. Safari 데이터를 지우면 함께 삭제되므로 주기적으로 내보내기를 권장합니다.</p>
+      <p className="mt-2 px-1 text-[12px] leading-[1.5] text-muted">기록은 이 아이폰 안의 대용량 저장소(IndexedDB)에 보관되며 서버로 전송되지 않습니다. 홈 화면에서 앱을 지우거나 휴대폰을 바꾸면 기록도 함께 사라지므로, 한 달에 한 번 백업해 두세요.</p>
 
       <SectionTitle>아이폰 홈 화면에 추가</SectionTitle>
       <Card className="p-4">

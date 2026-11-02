@@ -62,11 +62,11 @@ export function computeStats(state: AppState, today: string) {
   // 연속 기록: 오늘이 아직이면 어제부터, 휴식으로 계획된 날은 건너뜀
   let streak = 0;
   let cursor = isWorkoutDay(logs[today]) ? today : addDays(today, -1);
-  for (let guard = 0; guard < 400; guard++) {
+  const earliest = Object.keys(logs).sort()[0] ?? today;
+  while (cursor >= earliest) {
     if (isWorkoutDay(logs[cursor])) streak++;
     else if (!isRestPlan(state.schedule[weekday(cursor)])) break;
     cursor = addDays(cursor, -1);
-    if (diffDays(today, cursor) > 366) break;
   }
 
   // 누적

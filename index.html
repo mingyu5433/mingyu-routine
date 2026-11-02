@@ -14,8 +14,8 @@
     <script>
       // 첫 화면 깜빡임 방지: 저장된 테마를 미리 적용
       try {
-        var s = JSON.parse(localStorage.getItem('mingyu-routine:v1') || '{}');
-        var t = (s.settings && s.settings.theme) || 'system';
+        var t = localStorage.getItem('mingyu-routine:theme');
+        if (!t) { var s = JSON.parse(localStorage.getItem('mingyu-routine:v1') || '{}'); t = (s.settings && s.settings.theme) || 'system'; }
         var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
         if (dark) document.documentElement.classList.add('dark');
       } catch (e) {}

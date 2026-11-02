@@ -83,6 +83,8 @@ export interface Settings {
   goalDate: string;     // 목표일 (기본 12월 20일)
   autoProgram: boolean; // 추천 프로그램이 목표를 자동으로 정함
   testDays: Record<string, 'upper' | 'full'>; // 테스트 데이
+  lastBackupAt?: number; // 마지막 백업 시각(ms)
+  recapSeen?: string;    // 확인한 월간 결산 (YYYY-MM)
   firstPullup: { achieved: boolean; date?: string };
 }
 

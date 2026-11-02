@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AppState, Condition, DayLog, DayPlan, ItemLog, Settings, SetLog } from '../types';
 import { defaultSchedule } from '../data/schedule';
 import { getEx } from '../data/exercises';
@@ -6,8 +6,11 @@ import { todayKey, weekday } from './date';
 import { ADD_AFTER, firstWeek, PROGRAM, stepAt } from '../data/program';
 import { levelFor, programWeek } from './progress';
 import { buildTestLog } from '../data/testday';
+import { idbGet, idbSet, requestPersist } from './storage';
 
-const KEY = 'mingyu-routine:v1';
+const KEY = 'mingyu-routine:v1';          // 예전 localStorage 키 (이전용)
+const IDB_KEY = 'state';
+export const THEME_KEY = 'mingyu-routine:theme'; // 첫 화면 깜빡임 방지용 테마만 localStorage에
 
 export function defaultState(): AppState {
   return {
@@ -30,11 +33,31 @@ export function defaultState(): AppState {
   };
 }
 
-function load(): AppState {
+let idbOk = true;
+
+/** IndexedDB에서 불러오고, 없으면 예전 localStorage 기록을 옮겨 옵니다. */
+async function loadInitial(): Promise<AppState> {
   try {
+    const saved = await idbGet<AppState>(IDB_KEY);
+    if (saved) return fixToday(normalize(saved));
     const raw = localStorage.getItem(KEY);
-    if (!raw) return defaultState();
-    const st = normalize(JSON.parse(raw));
+    const st = raw ? normalize(JSON.parse(raw)) : defaultState();
+    await idbSet(IDB_KEY, st);
+    if (raw) localStorage.removeItem(KEY); // 옮기기가 끝난 뒤에만 삭제
+    return fixToday(st);
+  } catch {
+    idbOk = false; // 사생활 보호 모드 등 IndexedDB를 못 쓰는 환경 → localStorage로 계속
+    try {
+      const raw = localStorage.getItem(KEY);
+      return fixToday(raw ? normalize(JSON.parse(raw)) : defaultState());
+    } catch {
+      return defaultState();
+    }
+  }
+}
+
+function fixToday(st: AppState): AppState {
+  try {
     // 추천 프로그램 도입 전에 만들어진 오늘 기록(아직 체크 전)은 새 목표로 다시 계산
     const t = todayKey();
     const tl = st.logs[t];
@@ -48,7 +71,7 @@ function load(): AppState {
     }
     return st;
   } catch {
-    return defaultState();
+    return st; // 보정에 실패해도 기록은 그대로 둡니다
   }
 }
 
@@ -123,13 +146,32 @@ function withCompletion(log: DayLog): DayLog {
   return { ...log, completedAt: all ? log.completedAt ?? Date.now() : undefined };
 }
 
-function useStoreValue() {
-  const [state, setState] = useState<AppState>(load);
-  const [today, setToday] = useState(todayKey());
+function save(st: AppState) {
+  if (idbOk) { idbSet(IDB_KEY, st).catch(() => { idbOk = false; save(st); }); return; }
+  try { localStorage.setItem(KEY, JSON.stringify(st)); } catch { /* 저장 공간 부족 */ }
+}
 
+function useStoreValue(initial: AppState) {
+  const [state, setState] = useState<AppState>(initial);
+  const [today, setToday] = useState(todayKey());
+  const latest = useRef(state);
+  const timer = useRef<number | null>(null);
+
+  // 변경 즉시(0.2초 묶음) 저장, 앱을 벗어날 때는 바로 저장
   useEffect(() => {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* 저장 공간 부족 등 */ }
+    latest.current = state;
+    try { localStorage.setItem(THEME_KEY, state.settings.theme); } catch { /* 무시 */ }
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => save(state), 200);
   }, [state]);
+  useEffect(() => {
+    requestPersist();
+    const flush = () => { if (document.visibilityState === 'hidden') save(latest.current); };
+    const hide = () => save(latest.current);
+    document.addEventListener('visibilitychange', flush);
+    window.addEventListener('pagehide', hide);
+    return () => { document.removeEventListener('visibilitychange', flush); window.removeEventListener('pagehide', hide); };
+  }, []);
 
   // 자정이 지나거나 앱으로 돌아오면 날짜를 다시 확인
   useEffect(() => {
@@ -277,9 +319,16 @@ function useStoreValue() {
 type Store = ReturnType<typeof useStoreValue>;
 const Ctx = createContext<Store | null>(null);
 
-export function StoreProvider({ children }: { children: ReactNode }) {
-  const value = useStoreValue();
+function Inner({ initial, children }: { initial: AppState; children: ReactNode }) {
+  const value = useStoreValue(initial);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function StoreProvider({ children }: { children: ReactNode }) {
+  const [initial, setInitial] = useState<AppState | null>(null);
+  useEffect(() => { void loadInitial().then(setInitial); }, []);
+  if (!initial) return <div className="min-h-dvh bg-canvas" />;
+  return <Inner initial={initial}>{children}</Inner>;
 }
 
 export function useStore() {
