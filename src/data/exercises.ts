@@ -274,6 +274,22 @@ const MISTAKES: Record<string, string[]> = {
 for (const e of EXERCISES) e.mistakes = MISTAKES[e.id];
 
 EXERCISES.push({
+  id: 'dead-hang', name: '매달리기 (발 떼고)', part: '악력 · 어깨 · 등', category: 'pull', art: 'dead-hang',
+  unit: 'sec', defaultSets: 1, defaultTarget: 15, restSec: 0,
+  summary: '발판 없이 철봉에 매달려 버티기 · 테스트 데이 측정용',
+  steps: [
+    '발판을 철봉 아래에 두되, 매달린 동안에는 발을 대지 않습니다.',
+    '철봉을 어깨너비로 잡고 발을 떼는 순간부터 시간을 잽니다.',
+    '어깨를 귀에서 살짝 멀리 두고(팔은 편 채) 몸을 흔들지 않습니다.',
+    '손이 풀리기 직전이나 어깨가 불편해지면 발판을 딛고 내려옵니다.',
+  ],
+  cautions: ['어깨 앞쪽 통증이 생기면 즉시 내려옵니다.', '철봉의 허용 하중과 문틀 설치 상태를 확인합니다.', '점프해서 매달리지 않습니다.'],
+  breathing: '호흡을 참지 말고 일정하게 쉽니다.',
+  tips: ['5초 미만이어도 괜찮습니다. 오늘 숫자가 출발점입니다.'],
+  mistakes: ['어깨가 귀에 붙을 정도로 힘없이 늘어지는 것', '다리를 흔들어 반동을 주는 것'],
+});
+
+EXERCISES.push({
   id: 'cooldown', name: '마무리 스트레칭', part: '가슴 · 등 · 하체', category: 'mobility', art: 'stretch',
   unit: 'min', defaultSets: 1, defaultTarget: 5, restSec: 0,
   summary: '운동 후 숨을 고르고 사용한 근육을 부드럽게 늘이는 시간',

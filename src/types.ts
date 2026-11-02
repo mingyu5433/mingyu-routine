@@ -1,7 +1,7 @@
 export type Unit = 'reps' | 'sec' | 'min';
 export type Category = 'warmup' | 'strength' | 'pull' | 'cardio' | 'mobility';
 export type ArtKey =
-  | 'incline-pushup' | 'knee-pushup' | 'scap-pushup' | 'wall-slide' | 'doorway' | 'hang' | 'pullup'
+  | 'incline-pushup' | 'knee-pushup' | 'scap-pushup' | 'wall-slide' | 'doorway' | 'hang' | 'dead-hang' | 'pullup'
   | 'negative' | 'squat' | 'lunge' | 'hip-flexor' | 'bridge' | 'deadbug' | 'walk' | 'stretch';
 
 export interface Exercise {

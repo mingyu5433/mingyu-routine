@@ -62,6 +62,14 @@ function fixToday(st: AppState): AppState {
     const t = todayKey();
     const tl = st.logs[t];
     const isTest = !!st.settings.testDays?.[t];
+    const OLD: Record<string, { exerciseId: string; label: string }> = {
+      '보조 매달리기 최대': { exerciseId: 'dead-hang', label: '매달리기 최대 (발 떼고, 초)' },
+      '발 보조 풀업 최대': { exerciseId: 'scap-pullup', label: '견갑 풀업 최대 (발 떼고)' },
+    };
+    if (isTest && tl?.items.some((i) => i.label && OLD[i.label] && !i.sets[0]?.done)) {
+      const items = tl.items.map((i) => (i.label && OLD[i.label] && !i.sets[0]?.done ? { ...i, ...OLD[i.label] } : i));
+      return { ...st, logs: { ...st.logs, [t]: { ...tl, items } } };
+    }
     const stale = isTest ? !tl?.items.some((i) => i.test)
       : !tl?.items.some((i) => i.level) || tl?.items.some((i) => i.exerciseId === 'incline-pushup') || !tl?.items.some((i) => getEx(i.exerciseId)?.category === 'mobility');
     if (st.settings.autoProgram && tl && stale && !tl.items.some((i) => i.sets.some((x) => x.done))) {

@@ -6,8 +6,8 @@ interface TestDef { exerciseId: string; label: string; art?: ArtKey; optional?: 
 const UPPER_TESTS: TestDef[] = [
   { exerciseId: 'pushup', label: '일반 푸쉬업 최대', art: 'scap-pushup' },
   { exerciseId: 'pushup', label: '무릎 푸쉬업 최대 (일반이 5개 미만일 때만)', art: 'knee-pushup', optional: true },
-  { exerciseId: 'assisted-hang', label: '보조 매달리기 최대' },
-  { exerciseId: 'foot-pullup', label: '발 보조 풀업 최대' },
+  { exerciseId: 'dead-hang', label: '매달리기 최대 (발 떼고, 초)' },
+  { exerciseId: 'scap-pullup', label: '견갑 풀업 최대 (발 떼고)', art: 'dead-hang' },
   { exerciseId: 'deadbug', label: '데드버그 최대 (좌우 각)' },
 ];
 const LOWER_TESTS: TestDef[] = [
