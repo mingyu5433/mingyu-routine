@@ -1,8 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { AppState, Condition, DayLog, DayPlan, Settings, SetLog } from '../types';
+import type { AppState, Condition, DayLog, DayPlan, ItemLog, Settings, SetLog } from '../types';
 import { defaultSchedule } from '../data/schedule';
 import { getEx } from '../data/exercises';
 import { todayKey, weekday } from './date';
+import { ADD_AFTER, firstWeek, PROGRAM, stepAt } from '../data/program';
+import { levelFor, programWeek } from './progress';
 
 const KEY = 'mingyu-routine:v1';
 
@@ -16,6 +18,8 @@ export function defaultState(): AppState {
       sound: true,
       haptic: true,
       startDate: todayKey(),
+      goalDate: '2026-12-20',
+      autoProgram: true,
       firstPullup: { achieved: false },
     },
     schedule: defaultSchedule(),
@@ -28,7 +32,16 @@ function load(): AppState {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return defaultState();
-    return normalize(JSON.parse(raw));
+    const st = normalize(JSON.parse(raw));
+    // 추천 프로그램 도입 전에 만들어진 오늘 기록(아직 체크 전)은 새 목표로 다시 계산
+    const t = todayKey();
+    const tl = st.logs[t];
+    if (st.settings.autoProgram && tl && !tl.items.some((i) => i.level) && !tl.items.some((i) => i.sets.some((x) => x.done))) {
+      const logs = { ...st.logs };
+      delete logs[t];
+      return { ...st, logs };
+    }
+    return st;
   } catch {
     return defaultState();
   }
@@ -49,17 +62,33 @@ export function normalize(data: unknown): AppState {
   };
 }
 
-export function buildDayLog(date: string, plan: DayPlan): DayLog {
-  return {
-    date,
-    title: plan.title,
-    items: plan.items
-      .filter((p) => getEx(p.exerciseId))
-      .map((p) => ({
-        exerciseId: p.exerciseId,
-        sets: Array.from({ length: Math.max(1, p.sets) }, () => ({ target: p.target, actual: p.target, done: false })),
-      })),
-  };
+const makeSets = (n: number, target: number) =>
+  Array.from({ length: Math.max(1, n) }, () => ({ target, actual: target, done: false }));
+
+/** 일정 + (켜져 있으면) 추천 프로그램으로 그날의 기본 기록을 만듭니다. */
+export function buildDayLog(date: string, plan: DayPlan, state?: AppState): DayLog {
+  const auto = !!state?.settings.autoProgram;
+  const items: ItemLog[] = [];
+  for (const p of plan.items) {
+    if (!getEx(p.exerciseId)) continue;
+    if (auto && PROGRAM[p.exerciseId]) {
+      const { level, reason } = levelFor(state!, p.exerciseId, date);
+      const step = stepAt(p.exerciseId, level);
+      if (step) { items.push({ exerciseId: p.exerciseId, sets: makeSets(step.sets, step.target), level, hold: reason }); continue; }
+    }
+    items.push({ exerciseId: p.exerciseId, sets: makeSets(p.sets, p.target) });
+  }
+  if (auto) {
+    const week = programWeek(state!.settings.startDate, date);
+    for (const [exId, anchor] of Object.entries(ADD_AFTER)) {
+      const at = items.findIndex((i) => i.exerciseId === anchor);
+      if (at < 0 || items.some((i) => i.exerciseId === exId) || week < firstWeek(exId)) continue;
+      const { level, reason } = levelFor(state!, exId, date);
+      const step = stepAt(exId, level);
+      if (step) items.splice(at + 1, 0, { exerciseId: exId, sets: makeSets(step.sets, step.target), level, hold: reason });
+    }
+  }
+  return { date, title: plan.title, items };
 }
 
 const hasDone = (log?: DayLog) => !!log?.items.some((i) => i.sets.some((s) => s.done));
@@ -88,13 +117,13 @@ function useStoreValue() {
 
   /** 저장된 기록이 있으면 그것을, 없으면 일정으로 만든 오늘의 기본 기록을 반환 */
   const dayLog = useCallback(
-    (date: string): DayLog => state.logs[date] ?? buildDayLog(date, state.schedule[weekday(date)]),
-    [state.logs, state.schedule],
+    (date: string): DayLog => state.logs[date] ?? buildDayLog(date, state.schedule[weekday(date)], state),
+    [state],
   );
 
   const mutateDay = useCallback((date: string, fn: (log: DayLog) => DayLog) => {
     setState((s) => {
-      const base = s.logs[date] ?? buildDayLog(date, s.schedule[weekday(date)]);
+      const base = s.logs[date] ?? buildDayLog(date, s.schedule[weekday(date)], s);
       return { ...s, logs: { ...s.logs, [date]: withCompletion(fn(structuredClone(base))) } };
     });
   }, []);
@@ -105,6 +134,16 @@ function useStoreValue() {
         const set = log.items[i].sets[j];
         set.done = !set.done;
         set.doneAt = set.done ? Date.now() : undefined;
+        return log;
+      });
+    },
+    /** 수정 버튼으로 실제 수행 횟수를 기록 (0이면 미완료로 되돌림) */
+    recordSet(date: string, i: number, j: number, actual: number) {
+      mutateDay(date, (log) => {
+        const set = log.items[i].sets[j];
+        set.actual = actual;
+        if (actual <= 0) { set.done = false; set.doneAt = undefined; set.actual = set.target; }
+        else { if (!set.done) set.doneAt = Date.now(); set.done = true; }
         return log;
       });
     },
@@ -169,7 +208,13 @@ function useStoreValue() {
       });
     },
     updateSettings(patch: Partial<Settings>) {
-      setState((s) => ({ ...s, settings: { ...s.settings, ...patch } }));
+      setState((s) => {
+        const logs = { ...s.logs };
+        const t = todayKey();
+        // 프로그램 설정이 바뀌면 아직 시작하지 않은 오늘 목표를 다시 계산
+        if (('autoProgram' in patch || 'startDate' in patch) && !hasDone(logs[t])) delete logs[t];
+        return { ...s, settings: { ...s.settings, ...patch }, logs };
+      });
     },
     startTimer(seconds: number, label: string) {
       setState((s) => ({ ...s, timer: { endAt: Date.now() + seconds * 1000, total: seconds, pausedLeft: null, label } }));

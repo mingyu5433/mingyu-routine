@@ -8,6 +8,7 @@ import {
 import { EXERCISES, formatTarget, getEx, unitLabel } from '../data/exercises';
 import { PHASES } from '../data/quotes';
 import { Card, Chip, PrimaryButton, SectionTitle, Segmented, Sheet } from '../components/ui';
+import { ChangePreviewSheet } from '../components/Boost';
 
 const WD_SHORT = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -145,6 +146,7 @@ function StatsView() {
   const fp = state.settings.firstPullup;
   const exStats = EXERCISES.filter((e) => st.perEx[e.id]);
   const [series, setSeries] = useState<string>('');
+  const [preview, setPreview] = useState(false);
   const points = useMemo(() => weeklySeries(state, today, series || undefined), [state, today, series]);
   const seriesEx = series ? getEx(series) : undefined;
   const maxV = Math.max(1, ...points.map((p) => p.value));
@@ -303,6 +305,11 @@ function StatsView() {
         })}
       </div>
       <p className="mt-3 px-1 text-[12px] leading-[1.5] text-muted">단계별 목표는 방향을 잡기 위한 기준입니다. 변화의 속도는 개인차가 크며 결과를 보장하지 않습니다.</p>
+      <button type="button" onClick={() => setPreview(true)}
+        className="mt-4 flex h-12 w-full items-center justify-center rounded-sm border border-ink text-[15px] font-medium">
+        한 달 · 크리스마스 · 세 달 · 네 달 뒤 변화 보기
+      </button>
+      <ChangePreviewSheet open={preview} onClose={() => setPreview(false)} />
     </>
   );
 }

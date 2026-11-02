@@ -78,6 +78,9 @@ export function ScheduleView() {
                 className="mt-1.5 h-14 w-full rounded-sm border border-hairline bg-canvas px-3.5 text-[16px] outline-none focus:border-2 focus:border-ink" />
             </label>
 
+            {state.settings.autoProgram && (
+              <p className="mt-4 rounded-sm bg-primary-tint px-3 py-2.5 text-[13px] leading-[1.5] text-primary">추천 프로그램이 켜져 있어 근력·풀업·걷기의 세트와 횟수는 기록에 맞춰 자동으로 정해집니다. 여기서는 어떤 운동을 할지와 순서를 정해 주세요.</p>
+            )}
             <div className="mt-5 space-y-2.5">
               {draft.items.length === 0 && <p className="rounded-sm bg-soft p-4 text-center text-[14px] text-muted">휴식일입니다. 운동을 추가하면 운동하는 날이 됩니다.</p>}
               {draft.items.map((p, i) => {

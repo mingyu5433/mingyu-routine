@@ -48,6 +48,8 @@ export interface SetLog {
 export interface ItemLog {
   exerciseId: string;
   sets: SetLog[];
+  level?: number;          // 추천 프로그램 단계(주차)
+  hold?: 'miss' | 'pain';  // 단계를 올리지 않은 이유
 }
 
 export type Condition = 'good' | 'tired' | 'pain';
@@ -73,7 +75,9 @@ export interface Settings {
   restPull: number;
   sound: boolean;
   haptic: boolean;
-  startDate: string;    // 적응기 기준일
+  startDate: string;    // 적응기·프로그램 1주차 기준일
+  goalDate: string;     // 목표일 (기본 12월 20일)
+  autoProgram: boolean; // 추천 프로그램이 목표를 자동으로 정함
   firstPullup: { achieved: boolean; date?: string };
 }
 

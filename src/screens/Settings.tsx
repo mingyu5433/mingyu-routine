@@ -73,7 +73,15 @@ export function SettingsScreen({ onEditSchedule }: { onEditSchedule: () => void 
         <button onClick={onEditSchedule} className="flex w-full items-center gap-3 border-b border-hairline-soft px-4 py-4 text-left">
           <CalendarDays size={18} /><span className="flex-1 text-[15px] font-medium">운동 일정 수정</span><ChevronRight size={16} className="text-muted" />
         </button>
-        <Row title="시작일" desc="이 날부터 2주가 적응기입니다" last>
+        <Row title="추천 프로그램" desc="기록을 보고 매주 횟수·세트를 자동으로 정합니다">
+          <Toggle label="추천 프로그램" checked={s.autoProgram} onChange={(v) => updateSettings({ autoProgram: v })} />
+        </Row>
+        <Row title="목표일" desc="홈 화면 D-day 기준">
+          <input type="date" value={s.goalDate} min={s.startDate}
+            onChange={(e) => e.target.value && updateSettings({ goalDate: e.target.value })}
+            className="h-10 rounded-sm border border-hairline bg-canvas px-2.5 text-[14px] outline-none focus:border-ink" />
+        </Row>
+        <Row title="시작일" desc="프로그램 1주차 · 적응기 2주의 기준" last>
           <input type="date" value={s.startDate} max={todayKey()}
             onChange={(e) => e.target.value && updateSettings({ startDate: e.target.value })}
             className="h-10 rounded-sm border border-hairline bg-canvas px-2.5 text-[14px] outline-none focus:border-ink" />

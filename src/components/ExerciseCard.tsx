@@ -1,7 +1,8 @@
-import { Check, ChevronDown, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, Pause, Pencil, Plus, Settings2, Sparkles, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ItemLog } from '../types';
 import { CATEGORY_LABEL, formatTarget, getEx, unitLabel } from '../data/exercises';
+import { stepAt } from '../data/program';
 import { timeLabel } from '../lib/date';
 import { ExerciseArt } from './ExerciseArt';
 import { Stepper } from './ui';
@@ -12,17 +13,19 @@ interface Props {
   id?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  adapting: boolean;
   onToggle: (setIdx: number) => void;
-  onUpdate: (setIdx: number, patch: { target?: number; actual?: number }) => void;
+  onRecord: (setIdx: number, actual: number) => void;
+  onTarget: (setIdx: number, target: number) => void;
   onAdd: () => void;
   onRemove: (setIdx: number) => void;
 }
 
-export function ExerciseCard({ id, item, open, onOpenChange, adapting, onToggle, onUpdate, onAdd, onRemove }: Props) {
+export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord, onTarget, onAdd, onRemove }: Props) {
   const ex = getEx(item.exerciseId);
   const [info, setInfo] = useState(false);
-  const [edit, setEdit] = useState(false);
+  const [manage, setManage] = useState(false);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [draft, setDraft] = useState(0);
   if (!ex) return null;
 
   const done = item.sets.filter((s) => s.done).length;
@@ -31,7 +34,10 @@ export function ExerciseCard({ id, item, open, onOpenChange, adapting, onToggle,
   const target = item.sets[0]?.target ?? ex.defaultTarget;
   const sameTarget = item.sets.every((s) => s.target === target);
   const goal = `${total}세트 × ${sameTarget ? formatTarget(ex, target) : '세트별 목표'}`;
-  const isStrength = ex.category === 'strength' || ex.category === 'pull';
+  const step = item.level ? stepAt(ex.id, item.level) : null;
+  const u = unitLabel(ex);
+
+  const startEdit = (j: number) => { setEditing(j); setDraft(item.sets[j].done ? item.sets[j].actual : item.sets[j].target); };
 
   return (
     <article id={id} className={`scroll-mt-4 overflow-hidden rounded-md border bg-canvas transition-shadow ${open ? 'border-hairline shadow-float' : 'border-hairline'}`}>
@@ -65,64 +71,97 @@ export function ExerciseCard({ id, item, open, onOpenChange, adapting, onToggle,
 
       {open && (
         <div className="border-t border-hairline-soft px-3 pb-3">
-          {/* 세트 체크 */}
+          {/* 추천 프로그램 안내 */}
+          {item.level && (
+            <div className="mt-3 rounded-sm bg-soft px-3 py-2.5 text-[13px] leading-[1.5]">
+              <p className="flex items-center gap-1.5 font-semibold text-ink">
+                {item.hold ? <Pause size={13} /> : <Sparkles size={13} className="text-primary" />}
+                {item.hold === 'pain' ? '통증을 고려해 지난번 단계를 유지합니다'
+                  : item.hold === 'miss' ? '지난 목표를 다 채우면 다음 단계로 올라갑니다'
+                  : `추천 목표 · ${item.level}단계`}
+              </p>
+              {step?.note && <p className="mt-0.5 text-body">{step.note}</p>}
+            </div>
+          )}
+
+          {/* 세트: 체크 + 수정 */}
           <ul className="divide-y divide-hairline-soft">
-            {item.sets.map((s, j) => (
-              <li key={j} className="flex items-center gap-3 py-2.5">
-                <button type="button" onClick={() => onToggle(j)} aria-pressed={s.done}
-                  aria-label={`${j + 1}세트 ${s.done ? '완료 해제' : '완료'}`}
-                  className={`grid h-11 w-11 shrink-0 place-items-center rounded-full border-2 transition-colors ${s.done ? 'border-primary bg-primary text-on-primary' : 'border-border-strong text-transparent'}`}>
-                  <Check size={20} strokeWidth={3} className={s.done ? 'animate-pop' : ''} />
-                </button>
-                <div className="min-w-0 flex-1">
-                  <p className={`text-[15px] font-semibold ${s.done ? 'text-muted' : ''}`}>{j + 1}세트</p>
-                  <p className="text-[12px] text-muted tabular">
-                    {s.done && s.doneAt ? `${timeLabel(s.doneAt)} 완료` : `목표 ${formatTarget(ex, s.target)}`}
-                  </p>
-                </div>
-                {edit ? (
-                  <div className="flex items-center gap-1">
-                    <div className="text-right">
-                      <p className="mb-0.5 text-[11px] text-muted">목표</p>
-                      <Stepper size="sm" value={s.target} min={1} suffix={unitLabel(ex)}
-                        onChange={(v) => onUpdate(j, s.done ? { target: v } : { target: v, actual: v })} />
+            {item.sets.map((s, j) => {
+              const diff = s.done ? s.actual - s.target : 0;
+              if (editing === j) {
+                return (
+                  <li key={j} className="animate-rise py-3">
+                    <p className="text-[14px] font-semibold">{j + 1}세트 · 실제로 몇 {u} 했나요?</p>
+                    <p className="text-[12px] text-muted">목표 {formatTarget(ex, s.target)} · 덜 했거나 더 했으면 그대로 적어 주세요</p>
+                    <div className="mt-2.5 flex items-center justify-between gap-2">
+                      <Stepper value={draft} min={0} max={999} suffix={u} onChange={setDraft} />
+                      <div className="flex gap-1.5">
+                        <button type="button" onClick={() => setEditing(null)} className="h-10 rounded-sm px-3 text-[14px] font-medium text-muted">취소</button>
+                        <button type="button" onClick={() => { onRecord(j, draft); setEditing(null); }}
+                          className="h-10 rounded-sm bg-ink px-4 text-[14px] font-medium text-canvas">저장</button>
+                      </div>
                     </div>
-                    <button type="button" onClick={() => onRemove(j)} disabled={total <= 1} aria-label={`${j + 1}세트 삭제`}
-                      className="ml-1 grid h-8 w-8 place-items-center rounded-full text-muted disabled:opacity-30">
-                      <Trash2 size={16} />
+                    {draft === 0 && <p className="mt-1.5 text-[12px] text-muted">0으로 저장하면 이 세트는 '안 함'으로 돌아갑니다.</p>}
+                  </li>
+                );
+              }
+              return (
+                <li key={j} className="flex items-center gap-3 py-2.5">
+                  <button type="button" onClick={() => onToggle(j)} aria-pressed={s.done}
+                    aria-label={`${j + 1}세트 ${s.done ? '완료 해제' : '완료'}`}
+                    className={`grid h-11 w-11 shrink-0 place-items-center rounded-full border-2 transition-colors ${s.done ? 'border-primary bg-primary text-on-primary' : 'border-border-strong text-transparent'}`}>
+                    <Check size={20} strokeWidth={3} className={s.done ? 'animate-pop' : ''} />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <p className="tabular text-[16px] font-semibold">
+                      <span className="mr-1.5 text-[13px] font-medium text-muted">{j + 1}세트</span>
+                      {formatTarget(ex, s.done ? s.actual : s.target)}
+                      {diff !== 0 && (
+                        <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${diff > 0 ? 'bg-primary-tint text-primary' : 'bg-strong text-muted'}`}>
+                          {diff > 0 ? `+${diff}` : diff}
+                        </span>
+                      )}
+                    </p>
+                    <p className="tabular text-[12px] text-muted">
+                      {s.done ? `${s.doneAt ? timeLabel(s.doneAt) + ' 완료' : '완료'}${diff !== 0 ? ` · 목표 ${formatTarget(ex, s.target)}` : ''}` : '다 하면 체크'}
+                    </p>
+                  </div>
+                  {manage ? (
+                    <div className="flex items-center gap-1">
+                      <Stepper size="sm" value={s.target} min={1} suffix={u} onChange={(v) => onTarget(j, v)} />
+                      <button type="button" onClick={() => onRemove(j)} disabled={total <= 1} aria-label={`${j + 1}세트 삭제`}
+                        className="grid h-8 w-8 place-items-center rounded-full text-muted disabled:opacity-30"><Trash2 size={16} /></button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => startEdit(j)}
+                      className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-hairline px-3 text-[13px] font-medium">
+                      <Pencil size={12} /> 수정
                     </button>
-                  </div>
-                ) : (
-                  <div className="text-right">
-                    <p className="mb-0.5 text-[11px] text-muted">실제</p>
-                    <Stepper size="sm" value={s.actual} min={0} suffix={unitLabel(ex)} onChange={(v) => onUpdate(j, { actual: v })} />
-                  </div>
-                )}
-              </li>
-            ))}
+                  )}
+                </li>
+              );
+            })}
           </ul>
 
-          <div className="mt-1 flex items-center gap-2">
+          {manage && (
             <button type="button" onClick={onAdd}
-              className="inline-flex h-9 items-center gap-1 rounded-full border border-hairline px-3.5 text-[14px] font-medium">
+              className="mb-1 inline-flex h-9 items-center gap-1 rounded-full border border-hairline px-3.5 text-[14px] font-medium">
               <Plus size={14} /> 세트 추가
             </button>
-            <button type="button" onClick={() => setEdit((v) => !v)}
-              className={`inline-flex h-9 items-center gap-1 rounded-full px-3.5 text-[14px] font-medium ${edit ? 'bg-ink text-canvas' : 'border border-hairline'}`}>
-              <Pencil size={13} /> {edit ? '편집 완료' : '목표 · 세트 편집'}
-            </button>
-          </div>
-          {adapting && isStrength && total > 2 && (
-            <p className="mt-2 text-[12px] text-muted">적응기에는 1~2세트로도 충분합니다. 몸이 편할 때만 늘려 주세요.</p>
           )}
 
           {/* 운동 설명 */}
           <button type="button" onClick={() => setInfo((v) => !v)} aria-expanded={info}
-            className="mt-3 flex w-full items-center justify-between rounded-sm bg-soft px-3.5 py-3 text-[14px] font-medium">
+            className="mt-2 flex w-full items-center justify-between rounded-sm bg-soft px-3.5 py-3 text-[14px] font-medium">
             운동 방법 · 주의사항 보기
             <ChevronDown size={16} className={`transition-transform ${info ? 'rotate-180' : ''}`} />
           </button>
           {info && <div className="px-1 pb-1 pt-4"><ExerciseInfo ex={ex} /></div>}
+
+          <button type="button" onClick={() => { setManage((v) => !v); setEditing(null); }}
+            className="mx-auto mt-3 flex items-center gap-1 text-[12px] text-muted underline-offset-2 active:underline">
+            <Settings2 size={12} /> {manage ? '목표 조정 끝내기' : '오늘 목표 · 세트 수 직접 조정'}
+          </button>
         </div>
       )}
     </article>

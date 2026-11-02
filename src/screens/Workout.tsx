@@ -8,6 +8,9 @@ import { ExerciseInfo } from '../components/ExerciseInfo';
 import { Card, Chip, PrimaryButton, SectionTitle, Segmented, Sheet, Stepper } from '../components/ui';
 import { ScheduleView } from './Schedule';
 import type { Category } from '../types';
+import { PROGRAM } from '../data/program';
+import { levelFor } from '../lib/progress';
+import { stepAt } from '../data/program';
 
 const CAT_ORDER: Category[] = ['strength', 'pull', 'cardio', 'warmup', 'mobility'];
 
@@ -67,7 +70,9 @@ function LibraryView() {
 }
 
 function ExerciseDetail({ id, onClose }: { id: string | null; onClose: () => void }) {
-  const { state, setDayPlan, setExerciseGoalAll } = useStore();
+  const { state, today, setDayPlan, setExerciseGoalAll } = useStore();
+  const managed = !!id && state.settings.autoProgram && !!PROGRAM[id];
+  const nowStep = managed && id ? stepAt(id, levelFor(state, id, today).level) : null;
   const ex = id ? getEx(id) : undefined;
   const current = id ? WEEK_ORDER.flatMap((wd) => state.schedule[wd].items.filter((p) => p.exerciseId === id)) : [];
   const [goal, setGoal] = useState<{ id: string; sets: number; target: number } | null>(null);
@@ -108,6 +113,13 @@ function ExerciseDetail({ id, onClose }: { id: string | null; onClose: () => voi
 
           <div className="mt-5 rounded-md border border-hairline p-4">
             <p className="flex items-center gap-1.5 text-[14px] font-semibold"><Target size={15} />목표</p>
+            {managed && (
+              <p className="mt-2 rounded-sm bg-primary-tint px-3 py-2.5 text-[13px] leading-[1.5] text-primary">
+                추천 프로그램이 기록을 보고 매주 목표를 정합니다.{nowStep ? ` 지금 단계: ${nowStep.sets}세트 × ${formatTarget(ex, nowStep.target)}` : ''}
+                {' '}직접 정하려면 설정에서 추천 프로그램을 꺼 주세요.
+              </p>
+            )}
+            {!managed && <>
             <div className="mt-3 flex items-center justify-between gap-2">
               <div>
                 <p className="mb-1 text-[11px] text-muted">세트</p>
@@ -125,6 +137,7 @@ function ExerciseDetail({ id, onClose }: { id: string | null; onClose: () => voi
             ) : (
               <p className="mt-3 text-[12px] text-muted">아래에서 요일을 선택하면 이 목표로 일정에 추가됩니다.</p>
             )}
+            </>}
             <p className="mt-3 text-[14px] font-medium">하는 요일</p>
             <div className="mt-2 flex gap-1.5">
               {WEEK_ORDER.map((wd) => {

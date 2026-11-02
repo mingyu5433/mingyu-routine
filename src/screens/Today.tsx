@@ -1,20 +1,23 @@
-import { ArrowRight, Clock3, Coffee, Flame, PartyPopper, Play, Target, TrendingUp } from 'lucide-react';
+import { ArrowRight, ChevronRight, Clock3, Coffee, Flame, Flag, PartyPopper, Play, Sparkles, TrendingUp } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useStore, restFor } from '../lib/store';
-import { longLabel, addDays, weekday, diffDays } from '../lib/date';
-import { completion, computeStats, daySets, estimateMinutes, growthMessage, phaseOf, weekCompare } from '../lib/stats';
+import { longLabel, addDays, weekday, diffDays, parts } from '../lib/date';
+import { completion, computeStats, daySets, estimateMinutes, growthMessage, weekCompare } from '../lib/stats';
+import { programWeek } from '../lib/progress';
 import { formatTarget, getEx, unitLabel } from '../data/exercises';
 import { QUOTES } from '../data/quotes';
+import { WEEK_FOCUS, PROGRAM_WEEKS } from '../data/program';
 import { WEEKDAYS } from '../data/schedule';
 import { ExerciseCard } from '../components/ExerciseCard';
+import { ChangePreviewSheet, MotivationSheet } from '../components/Boost';
 import { Card, Chip, ProgressBar, Segmented, SectionTitle } from '../components/ui';
 import { haptic, unlockAudio } from '../lib/feedback';
 import type { Condition } from '../types';
 
 const CONDITION_MSG: Record<Condition, string | null> = {
   good: null,
-  tired: '피곤한 날에는 세트를 줄이거나 준비운동과 걷기만 해도 충분합니다. 목표 세트는 편하게 줄여 주세요.',
-  pain: '통증이 있는 부위의 운동은 쉬어도 괜찮습니다. 통증을 참고 반복하지 말고, 통증이 반복되면 전문가의 평가를 권장합니다.',
+  tired: '피곤한 날에는 세트를 줄이거나 준비운동과 걷기만 해도 충분합니다. 각 운동의 "직접 조정"에서 세트를 줄여 주세요.',
+  pain: '통증이 있는 부위의 운동은 쉬어도 괜찮습니다. 오늘 통증을 기록하면 다음 운동일에 단계를 올리지 않습니다. 통증이 반복되거나 일상에서도 아프다면 물리치료사나 정형외과 평가를 권장합니다.',
 };
 
 export function TodayScreen() {
@@ -24,10 +27,20 @@ export function TodayScreen() {
   const pct = completion(log);
   const { total, done } = daySets(log);
   const [lo, hi] = estimateMinutes(log, state.settings);
-  const ph = phaseOf(state.settings.startDate, today);
   const quote = QUOTES[Math.abs(diffDays(today, '2026-01-01')) % QUOTES.length];
   const streak = useMemo(() => computeStats(state, today).streak, [state, today]);
   const growth = useMemo(() => weekCompare(state, today).items.find((x) => x.diff > 0), [state, today]);
+  const [boost, setBoost] = useState(false);
+  const [preview, setPreview] = useState(false);
+
+  // 목표일 카운트다운
+  const goal = state.settings.goalDate;
+  const week = programWeek(state.settings.startDate, today);
+  const totalDays = Math.max(1, diffDays(goal, state.settings.startDate) + 1);
+  const goalLeft = diffDays(goal, today);
+  const goalPct = Math.min(100, Math.max(0, Math.round(((diffDays(today, state.settings.startDate) + 1) / totalDays) * 100)));
+  const goalWeeks = Math.ceil(totalDays / 7);
+  const g = parts(goal);
 
   const warmups = log.items.map((it, i) => ({ it, i })).filter(({ it }) => getEx(it.exerciseId)?.category === 'warmup');
   const mains = log.items.map((it, i) => ({ it, i })).filter(({ it }) => getEx(it.exerciseId)?.category !== 'warmup');
@@ -47,12 +60,8 @@ export function TodayScreen() {
   };
   const nextEx = firstOpen >= 0 ? getEx(log.items[firstOpen].exerciseId) : undefined;
 
-  const toggle = (i: number, j: number) => {
-    unlockAudio();
-    const set = log.items[i].sets[j];
-    const willDone = !set.done;
-    store.toggleSet(today, i, j);
-    if (!willDone) return;
+  /** 세트가 새로 완료되었을 때: 진동, 휴식 타이머, 다음 운동 펼치기 */
+  const afterDone = (i: number, j: number) => {
     if (state.settings.haptic) haptic(15);
     const remaining = total - done - 1;
     if (remaining <= 0) {
@@ -63,18 +72,31 @@ export function TodayScreen() {
     const ex = getEx(log.items[i].exerciseId)!;
     const nextInSame = log.items[i].sets.some((s, k) => k !== j && !s.done);
     if (!nextInSame) {
-      // 이 운동을 다 마치면 다음 미완료 운동 카드를 펼쳐 둡니다
       const next = log.items.findIndex((it, k) => k !== i && it.sets.some((s) => !s.done));
       if (next >= 0) setOpenSet((prev) => { const n = new Set(prev); n.delete(i); n.add(next); return n; });
     }
     store.startTimer(restFor(ex.id, state.settings), nextInSame ? `${ex.name} 다음 세트까지` : '다음 운동까지');
   };
 
+  const toggle = (i: number, j: number) => {
+    unlockAudio();
+    const wasDone = log.items[i].sets[j].done;
+    store.toggleSet(today, i, j);
+    if (!wasDone) afterDone(i, j);
+  };
+  const record = (i: number, j: number, actual: number) => {
+    unlockAudio();
+    const wasDone = log.items[i].sets[j].done;
+    store.recordSet(today, i, j, actual);
+    if (!wasDone && actual > 0) afterDone(i, j);
+  };
+
   const card = ({ it, i }: { it: typeof log.items[number]; i: number }) => (
-    <ExerciseCard key={`${today}-${i}-${it.exerciseId}`} id={`ex-${i}`} item={it} adapting={ph.adapting}
+    <ExerciseCard key={`${today}-${i}-${it.exerciseId}`} id={`ex-${i}`} item={it}
       open={openSet.has(i)} onOpenChange={(v) => setOpen(i, v)}
       onToggle={(j) => toggle(i, j)}
-      onUpdate={(j, patch) => store.updateSet(today, i, j, patch)}
+      onRecord={(j, a) => record(i, j, a)}
+      onTarget={(j, t) => store.updateSet(today, i, j, it.sets[j].done ? { target: t } : { target: t, actual: t })}
       onAdd={() => store.addSet(today, i)}
       onRemove={(j) => store.removeSet(today, i, j)} />
   );
@@ -89,7 +111,10 @@ export function TodayScreen() {
           <span className="text-[12px] font-bold tracking-[0.3px] text-primary">MINGYU ROUTINE</span>
           <div className="flex items-center gap-1.5">
             {streak > 0 && <Chip><Flame size={12} />{streak}일 연속</Chip>}
-            <Chip tone={ph.adapting ? 'primary' : 'soft'}>{ph.phase.name} · {ph.day}일차</Chip>
+            <button type="button" onClick={() => setBoost(true)}
+              className="inline-flex h-8 items-center gap-1 rounded-full bg-primary px-3 text-[12px] font-semibold text-on-primary active:bg-primary-active">
+              <Sparkles size={13} /> 동기부여
+            </button>
           </div>
         </div>
         <h1 className="mt-3 text-[28px] font-bold leading-[1.3]">{longLabel(today)}</h1>
@@ -104,8 +129,24 @@ export function TodayScreen() {
         })()}
       </header>
 
+      {/* 목표일 카운트다운 */}
+      <button type="button" onClick={() => setPreview(true)} className="mt-5 block w-full rounded-md bg-ink p-4 text-left text-canvas">
+        <div className="flex items-center justify-between">
+          <p className="flex items-center gap-1.5 text-[13px] font-semibold opacity-80"><Flag size={13} />{g.m}월 {g.d}일까지</p>
+          <p className="tabular text-[13px] font-semibold opacity-80">{Math.min(week, PROGRAM_WEEKS)}주차 / {goalWeeks}주</p>
+        </div>
+        <p className="tabular mt-1 text-[28px] font-bold leading-tight">
+          {goalLeft > 0 ? <>D-{goalLeft}</> : goalLeft === 0 ? '오늘이 목표일' : '목표일 완주'}
+        </p>
+        <p className="mt-1 text-[14px] opacity-85">{WEEK_FOCUS[Math.min(week, PROGRAM_WEEKS) - 1]}</p>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/20">
+          <div className="h-full rounded-full bg-primary" style={{ width: `${goalPct}%` }} />
+        </div>
+        <p className="mt-3 flex items-center justify-end gap-0.5 text-[13px] font-medium opacity-80">한 달 · 크리스마스 · 세 달 뒤 변화 보기 <ChevronRight size={14} /></p>
+      </button>
+
       {isRest ? (
-        <Card className="mt-6 p-6">
+        <Card className="mt-4 p-6">
           <div className="grid h-12 w-12 place-items-center rounded-full bg-strong"><Coffee size={22} /></div>
           <h2 className="mt-4 text-[22px] font-medium tracking-[-0.44px]">{log.title || '푹 쉬는 날'}</h2>
           <p className="mt-2 text-[14px] leading-[1.6] text-body">근육은 운동할 때 자극받고 회복할 때 성장합니다. 오늘은 충분히 쉬어 주세요.</p>
@@ -116,8 +157,7 @@ export function TodayScreen() {
         </Card>
       ) : (
         <>
-          {/* 오늘의 요약 — 시스템에서 유일하게 큰 숫자를 쓰는 지점 */}
-          <Card className="mt-6 p-6 shadow-float">
+          <Card className="mt-4 p-6 shadow-float">
             <p className="text-[22px] font-medium leading-[1.25] tracking-[-0.44px]">오늘은 {log.title}!</p>
             <div className="mt-5 flex items-end justify-between">
               <div>
@@ -140,7 +180,7 @@ export function TodayScreen() {
             )}
 
             <div className="mt-6 border-t border-hairline-soft pt-4">
-              <p className="mb-2 flex items-center gap-1.5 text-[14px] font-semibold"><Target size={15} />오늘의 목표</p>
+              <p className="mb-2 text-[14px] font-semibold">{state.settings.autoProgram ? '오늘 해야 할 것 (추천)' : '오늘의 목표'}</p>
               <ul className="space-y-1.5 text-[14px]">
                 {mains.map(({ it }) => {
                   const ex = getEx(it.exerciseId)!;
@@ -161,7 +201,7 @@ export function TodayScreen() {
               <PartyPopper size={22} className="mt-0.5 shrink-0 text-primary" />
               <div>
                 <p className="text-[16px] font-semibold">오늘의 운동 완료!</p>
-                <p className="mt-1 text-[14px] opacity-80">{total}세트를 모두 마쳤습니다. 기록은 자동으로 저장되었습니다. 이제 충분히 회복해 주세요.</p>
+                <p className="mt-1 text-[14px] opacity-80">{total}세트를 모두 마쳤습니다. 기록은 자동으로 저장되었습니다. {goalLeft > 0 ? `${g.m}월 ${g.d}일까지 ${goalLeft}일, 오늘도 한 칸 가까워졌습니다.` : '이제 충분히 회복해 주세요.'}</p>
               </div>
             </div>
           )}
@@ -178,6 +218,10 @@ export function TodayScreen() {
             )}
           </div>
 
+          <p className="mt-6 rounded-sm bg-soft px-3.5 py-3 text-[13px] leading-[1.55] text-body">
+            <b className="text-ink">하는 방법</b> · 세트를 끝내면 동그라미를 누르세요. 목표보다 덜 했거나 더 했다면 옆의 <b className="text-ink">수정</b>을 눌러 실제 횟수를 적으면 됩니다.
+          </p>
+
           {warmups.length > 0 && (
             <>
               <SectionTitle right={<span className="text-[13px] text-muted">{warmups.length}개</span>}>준비운동</SectionTitle>
@@ -192,6 +236,9 @@ export function TodayScreen() {
           )}
         </>
       )}
+
+      <MotivationSheet open={boost} onClose={() => setBoost(false)} />
+      <ChangePreviewSheet open={preview} onClose={() => setPreview(false)} />
     </div>
   );
 }
