@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 첨부 디자인 사양 기반 토큰 — 라이트 */
+:root {
+  --c-canvas: #ffffff;
+  --c-surface-soft: #f7f7f7;
+  --c-surface-strong: #f2f2f2;
+  --c-hairline: #dddddd;
+  --c-hairline-soft: #ebebeb;
+  --c-border-strong: #c1c1c1;
+  --c-ink: #222222;
+  --c-body: #3f3f3f;
+  --c-muted: #6a6a6a;
+  --c-muted-soft: #929292;
+  --c-primary: #ff385c;
+  --c-primary-active: #e00b41;
+  --c-primary-disabled: #ffd1da;
+  --c-primary-tint: #fff0f3;
+  --c-on-primary: #ffffff;
+  --c-error: #c13515;
+  --shadow-float: rgba(0, 0, 0, 0.02) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 2px 6px 0, rgba(0, 0, 0, 0.1) 0 4px 8px 0;
+  color-scheme: light;
+}
+
+/* 다크 모드 — 사양에 없는 부분이라 같은 위계를 유지하도록 반전해 구성 */
+.dark {
+  --c-canvas: #121212;
+  --c-surface-soft: #1c1c1c;
+  --c-surface-strong: #262626;
+  --c-hairline: #333333;
+  --c-hairline-soft: #2a2a2a;
+  --c-border-strong: #4a4a4a;
+  --c-ink: #f2f2f2;
+  --c-body: #d4d4d4;
+  --c-muted: #a3a3a3;
+  --c-muted-soft: #7a7a7a;
+  --c-primary: #ff4d6d;
+  --c-primary-active: #ff2a50;
+  --c-primary-disabled: #5a2430;
+  --c-primary-tint: #2a1519;
+  --c-error: #ff7a5c;
+  --shadow-float: rgba(255, 255, 255, 0.04) 0 0 0 1px, rgba(0, 0, 0, 0.3) 0 2px 6px 0, rgba(0, 0, 0, 0.45) 0 4px 8px 0;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-canvas: var(--c-canvas);
+  --color-soft: var(--c-surface-soft);
+  --color-strong: var(--c-surface-strong);
+  --color-hairline: var(--c-hairline);
+  --color-hairline-soft: var(--c-hairline-soft);
+  --color-border-strong: var(--c-border-strong);
+  --color-ink: var(--c-ink);
+  --color-body: var(--c-body);
+  --color-muted: var(--c-muted);
+  --color-muted-soft: var(--c-muted-soft);
+  --color-primary: var(--c-primary);
+  --color-primary-active: var(--c-primary-active);
+  --color-primary-disabled: var(--c-primary-disabled);
+  --color-primary-tint: var(--c-primary-tint);
+  --color-on-primary: var(--c-on-primary);
+  --color-error: var(--c-error);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-xl: 32px;
+  --shadow-float: var(--shadow-float);
+  --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", Pretendard, Inter, system-ui, Roboto, "Helvetica Neue", "Noto Sans KR", sans-serif;
+}
+
+html, body, #root { min-height: 100%; }
+body {
+  background: var(--c-canvas);
+  color: var(--c-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+  word-break: keep-all;
+}
+button { cursor: pointer; touch-action: manipulation; }
+input { font: inherit; }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+.safe-top { padding-top: max(env(safe-area-inset-top), 12px); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.tabular { font-variant-numeric: tabular-nums; }
+
+@keyframes pop { 0% { transform: scale(0.6); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
+.animate-pop { animation: pop 0.28s ease-out; }
+@keyframes rise { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+.animate-rise { animation: rise 0.25s ease-out; }
+@media (prefers-reduced-motion: reduce) { .animate-pop, .animate-rise { animation: none; } }
