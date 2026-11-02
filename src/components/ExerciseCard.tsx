@@ -2,7 +2,7 @@ import { Check, ChevronDown, Pause, Pencil, Plus, Settings2, Sparkles, Trash2 } 
 import { useState } from 'react';
 import type { ItemLog } from '../types';
 import { CATEGORY_LABEL, formatTarget, getEx, unitLabel } from '../data/exercises';
-import { stepAt } from '../data/program';
+import { stepAt, variantArt, variantName } from '../data/program';
 import { timeLabel } from '../lib/date';
 import { ExerciseArt } from './ExerciseArt';
 import { Stepper } from './ui';
@@ -44,7 +44,7 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
       <button type="button" onClick={() => onOpenChange(!open)} aria-expanded={open}
         className="flex w-full items-center gap-3.5 p-3 text-left">
         <div className={`relative grid h-[68px] w-[84px] shrink-0 place-items-center rounded-sm ${complete ? 'bg-primary-tint text-primary' : 'bg-soft text-ink'}`}>
-          <ExerciseArt art={ex.art} className="h-[54px] w-[76px]" />
+          <ExerciseArt art={variantArt(ex.id, item.level) ?? ex.art} className="h-[54px] w-[76px]" />
           {complete && (
             <span className="animate-pop absolute -right-1.5 -top-1.5 grid h-6 w-6 place-items-center rounded-full bg-primary text-on-primary">
               <Check size={14} strokeWidth={3} />
@@ -57,7 +57,7 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
             <span className="text-[12px] text-muted-soft">·</span>
             <span className="truncate text-[12px] text-muted">{ex.part}</span>
           </div>
-          <h3 className={`text-[16px] font-semibold leading-tight ${complete ? 'text-muted' : ''}`}>{ex.name}</h3>
+          <h3 className={`text-[16px] font-semibold leading-tight ${complete ? 'text-muted' : ''}`}>{variantName(ex.name, ex.id, item.level)}</h3>
           <p className="mt-1 text-[14px] text-muted tabular">{goal}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">

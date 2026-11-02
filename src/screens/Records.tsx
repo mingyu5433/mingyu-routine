@@ -150,7 +150,7 @@ function StatsView() {
   const points = useMemo(() => weeklySeries(state, today, series || undefined), [state, today, series]);
   const seriesEx = series ? getEx(series) : undefined;
   const maxV = Math.max(1, ...points.map((p) => p.value));
-  const graphOptions = ['incline-pushup', 'foot-pullup', 'squat', 'hip-bridge', 'brisk-walk'].filter((id) => st.perEx[id]);
+  const graphOptions = ['pushup', 'incline-pushup', 'foot-pullup', 'squat', 'hip-bridge', 'brisk-walk'].filter((id) => st.perEx[id]);
 
   return (
     <>

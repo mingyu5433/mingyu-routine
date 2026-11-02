@@ -11,7 +11,7 @@ const upper = (): DayPlan => ({
   title: '상체 운동하는 날',
   items: [
     item('scap-pushup'), item('wall-slide'), item('doorway-stretch'),
-    item('incline-pushup'), item('assisted-hang'), item('foot-pullup'), item('deadbug'),
+    item('pushup'), item('assisted-hang'), item('foot-pullup'), item('deadbug'),
   ],
 });
 const lower = (walk: boolean): DayPlan => ({

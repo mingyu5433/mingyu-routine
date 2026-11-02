@@ -163,7 +163,7 @@ export function weeklySeries(state: AppState, today: string, exId?: string) {
 }
 
 // ── 월간 달력 ───────────────────────────────────────────
-const UPPER = new Set(['incline-pushup', 'assisted-hang', 'scap-pullup', 'foot-pullup', 'negative-pullup']);
+const UPPER = new Set(['pushup', 'incline-pushup', 'assisted-hang', 'scap-pullup', 'foot-pullup', 'negative-pullup']);
 const LOWER = new Set(['squat', 'hip-bridge']);
 
 /** 그날 실제로 완료한 운동 기준의 종류 라벨 */

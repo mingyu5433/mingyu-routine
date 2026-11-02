@@ -6,7 +6,7 @@ import { completion, computeStats, daySets, estimateMinutes, growthMessage, week
 import { programWeek } from '../lib/progress';
 import { formatTarget, getEx, unitLabel } from '../data/exercises';
 import { QUOTES } from '../data/quotes';
-import { WEEK_FOCUS, PROGRAM_WEEKS } from '../data/program';
+import { WEEK_FOCUS, PROGRAM_WEEKS, variantName } from '../data/program';
 import { WEEKDAYS } from '../data/schedule';
 import { ExerciseCard } from '../components/ExerciseCard';
 import { ChangePreviewSheet, MotivationSheet } from '../components/Boost';
@@ -175,7 +175,7 @@ export function TodayScreen() {
             {nextEx && (
               <button type="button" onClick={() => goTo(firstOpen)}
                 className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-sm bg-primary text-[16px] font-medium text-on-primary active:bg-primary-active">
-                {done === 0 ? <><Play size={16} fill="currentColor" />운동 시작하기</> : <>이어하기 · {nextEx.name}<ArrowRight size={16} /></>}
+                {done === 0 ? <><Play size={16} fill="currentColor" />운동 시작하기</> : <>이어하기 · {variantName(nextEx.name, nextEx.id, log.items[firstOpen].level)}<ArrowRight size={16} /></>}
               </button>
             )}
 
@@ -187,7 +187,7 @@ export function TodayScreen() {
                   const ok = it.sets.every((s) => s.done);
                   return (
                     <li key={it.exerciseId} className="flex justify-between gap-3">
-                      <span className={ok ? 'text-muted line-through' : 'text-body'}>{ex.name}</span>
+                      <span className={ok ? 'text-muted line-through' : 'text-body'}>{variantName(ex.name, ex.id, it.level)}</span>
                       <span className="tabular shrink-0 text-muted">{it.sets.length}세트 × {formatTarget(ex, it.sets[0]?.target ?? 0)}</span>
                     </li>
                   );

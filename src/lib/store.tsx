@@ -36,7 +36,8 @@ function load(): AppState {
     // 추천 프로그램 도입 전에 만들어진 오늘 기록(아직 체크 전)은 새 목표로 다시 계산
     const t = todayKey();
     const tl = st.logs[t];
-    if (st.settings.autoProgram && tl && !tl.items.some((i) => i.level) && !tl.items.some((i) => i.sets.some((x) => x.done))) {
+    const stale = !tl?.items.some((i) => i.level) || tl?.items.some((i) => i.exerciseId === 'incline-pushup');
+    if (st.settings.autoProgram && tl && stale && !tl.items.some((i) => i.sets.some((x) => x.done))) {
       const logs = { ...st.logs };
       delete logs[t];
       return { ...st, logs };
@@ -45,6 +46,18 @@ function load(): AppState {
   } catch {
     return defaultState();
   }
+}
+
+/** 경사 푸쉬업(받침대 필요)을 무릎 → 일반 푸쉬업 프로그램으로 바꿉니다. */
+function migrateSchedule(schedule: AppState['schedule']): AppState['schedule'] {
+  const out: AppState['schedule'] = {};
+  for (const [k, plan] of Object.entries(schedule)) {
+    out[Number(k)] = {
+      ...plan,
+      items: plan.items.map((p) => (p.exerciseId === 'incline-pushup' ? { exerciseId: 'pushup', sets: 2, target: 6 } : p)),
+    };
+  }
+  return out;
 }
 
 /** 가져오기/불러오기 시 누락 필드를 기본값으로 채웁니다. */
@@ -56,7 +69,7 @@ export function normalize(data: unknown): AppState {
   return {
     version: 1,
     settings: { ...d.settings, ...(s.settings ?? {}) },
-    schedule: s.schedule && typeof s.schedule === 'object' ? { ...d.schedule, ...s.schedule } : d.schedule,
+    schedule: migrateSchedule(s.schedule && typeof s.schedule === 'object' ? { ...d.schedule, ...s.schedule } : d.schedule),
     logs: s.logs ?? {},
     timer: s.timer ?? null,
   };
