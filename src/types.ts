@@ -90,6 +90,7 @@ export interface Settings {
   lastBackupAt?: number; // 마지막 백업 시각(ms)
   recapSeen?: string;    // 확인한 월간 결산 (YYYY-MM)
   selfNote?: string;     // 나에게 한 마디 (화면 맨 아래)
+  migV?: number;         // 적용된 데이터 이전 버전
   firstPullup: { achieved: boolean; date?: string };
 }
 

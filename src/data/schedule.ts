@@ -10,8 +10,8 @@ const item = (id: string, sets?: number, target?: number): PlanItem => ({
 const upper = (): DayPlan => ({
   title: '상체 운동하는 날',
   items: [
-    item('scap-pushup'), item('wall-slide'), item('doorway-stretch'),
-    item('pushup'), item('assisted-hang'), item('foot-pullup'), item('deadbug'), item('cooldown'),
+    item('scap-pushup'), item('wall-slide'), item('arm-circles'),
+    item('pushup'), item('scap-pullup'), item('foot-pullup'), item('deadbug'), item('cooldown'),
   ],
 });
 const lower = (walk: boolean): DayPlan => ({

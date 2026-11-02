@@ -25,6 +25,7 @@ export function defaultState(): AppState {
       goalDate: '2026-12-20',
       autoProgram: true,
       testDays: { '2026-11-02': 'upper', '2026-12-20': 'full' },
+      migV: 2,
       firstPullup: { achieved: false },
     },
     schedule: defaultSchedule(),
@@ -66,6 +67,11 @@ function fixToday(st: AppState): AppState {
       '보조 매달리기 최대': { exerciseId: 'dead-hang', label: '매달리기 최대 (발 떼고, 초)' },
       '발 보조 풀업 최대': { exerciseId: 'scap-pullup', label: '견갑 풀업 최대 (발 떼고)' },
     };
+    if (isTest && tl?.items.some((i) => i.label?.startsWith('무릎 푸쉬업') && !i.sets[0]?.done)) {
+      const items = tl.items.filter((i) => !(i.label?.startsWith('무릎 푸쉬업') && !i.sets[0]?.done));
+      st = { ...st, logs: { ...st.logs, [t]: { ...tl, items } } };
+      return fixToday(st);
+    }
     if (isTest && tl?.items.some((i) => i.label && OLD[i.label] && !i.sets[0]?.done)) {
       const items = tl.items.map((i) => (i.label && OLD[i.label] && !i.sets[0]?.done ? { ...i, ...OLD[i.label] } : i));
       return { ...st, logs: { ...st.logs, [t]: { ...tl, items } } };
@@ -100,16 +106,37 @@ function migrateSchedule(schedule: AppState['schedule']): AppState['schedule'] {
   return out;
 }
 
+/**
+ * v2 (11/2 테스트 반영): 운동 전 정적 스트레칭(문틀 가슴)은 마무리로 옮기고 동적 준비운동(팔 크게 돌리기)으로 교체,
+ * 보조 매달리기 → 견갑 풀업 상시 포함. 한 번만 적용되어 이후 직접 바꾼 일정은 건드리지 않습니다.
+ */
+function migrateV2(schedule: AppState['schedule']): AppState['schedule'] {
+  const out: AppState['schedule'] = {};
+  for (const [k, plan] of Object.entries(schedule)) {
+    let items = plan.items.map((p) => (p.exerciseId === 'doorway-stretch' ? { exerciseId: 'arm-circles', sets: 1, target: 10 } : p));
+    if (items.some((p) => p.exerciseId === 'assisted-hang')) {
+      items = items.some((p) => p.exerciseId === 'scap-pullup')
+        ? items.filter((p) => p.exerciseId !== 'assisted-hang')
+        : items.map((p) => (p.exerciseId === 'assisted-hang' ? { exerciseId: 'scap-pullup', sets: 3, target: 4 } : p));
+    }
+    out[Number(k)] = { ...plan, items };
+  }
+  return out;
+}
+
 /** 가져오기/불러오기 시 누락 필드를 기본값으로 채웁니다. */
 export function normalize(data: unknown): AppState {
   const d = defaultState();
   if (!data || typeof data !== 'object') throw new Error('형식이 올바르지 않습니다.');
   const s = data as Partial<AppState>;
   if (s.logs && typeof s.logs !== 'object') throw new Error('기록 데이터 형식이 올바르지 않습니다.');
+  const settings = { ...d.settings, ...(s.settings ?? {}), testDays: { ...d.settings.testDays, ...(s.settings?.testDays ?? {}) } };
+  let schedule = migrateSchedule(s.schedule && typeof s.schedule === 'object' ? { ...d.schedule, ...s.schedule } : d.schedule);
+  if ((s.settings?.migV ?? 0) < 2) { schedule = migrateV2(schedule); settings.migV = 2; }
   return {
     version: 1,
-    settings: { ...d.settings, ...(s.settings ?? {}), testDays: { ...d.settings.testDays, ...(s.settings?.testDays ?? {}) } },
-    schedule: migrateSchedule(s.schedule && typeof s.schedule === 'object' ? { ...d.schedule, ...s.schedule } : d.schedule),
+    settings,
+    schedule,
     logs: s.logs ?? {},
     timer: s.timer ?? null,
   };

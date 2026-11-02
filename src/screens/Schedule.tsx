@@ -61,7 +61,7 @@ export function ScheduleView() {
 
       <div className="mt-6 rounded-md bg-soft p-4 text-[14px] leading-[1.6] text-body">
         <p className="font-semibold text-ink">풀업 단계 안내</p>
-        <p className="mt-1">처음에는 보조 매달리기와 발 보조 풀업으로 시작합니다. 매달리기가 익숙해지면 <b>견갑 풀업</b>을, 보조 풀업이 통증 없이 가능해지면 <b>네거티브 풀업</b>을 일정에 추가해 보세요.</p>
+        <p className="mt-1">11월 2일 테스트에서 매달리기 60초가 나와, <b>견갑 풀업</b>과 <b>발 보조 풀업</b>으로 시작하고 2주차부터 <b>네거티브 풀업</b>이 자동으로 추가됩니다. 7주차(12월 20일 주간)에는 안전하다면 보조 없는 풀업 1회를 시도합니다.</p>
       </div>
 
       <button type="button" onClick={() => { if (confirm('주간 일정을 기본값으로 되돌릴까요? 기록은 유지됩니다.')) resetSchedule(); }}
