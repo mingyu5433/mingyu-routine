@@ -47,7 +47,7 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
       <button type="button" onClick={() => onOpenChange(!open)} aria-expanded={open}
         className="flex w-full items-center gap-3.5 p-3 text-left">
         <div className={`relative grid h-[68px] w-[84px] shrink-0 place-items-center rounded-sm ${complete ? 'bg-primary-tint text-primary' : 'bg-soft text-ink'}`}>
-          <ExerciseArt art={item.art ?? variantArt(ex.id, item.level) ?? ex.art} className="h-[54px] w-[76px]" />
+          <ExerciseArt art={item.art ?? variantArt(ex.id, item.level) ?? ex.art} className="h-[62px] w-[80px]" halo={complete ? 'var(--c-primary-tint)' : 'var(--c-surface-soft)'} />
           {complete && (
             <span className="animate-pop absolute -right-1.5 -top-1.5 grid h-6 w-6 place-items-center rounded-full bg-primary text-on-primary">
               <Check size={14} strokeWidth={3} />

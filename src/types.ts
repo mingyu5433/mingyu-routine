@@ -1,8 +1,7 @@
 export type Unit = 'reps' | 'sec' | 'min';
 export type Category = 'warmup' | 'strength' | 'pull' | 'cardio' | 'mobility';
-export type ArtKey =
-  | 'incline-pushup' | 'knee-pushup' | 'scap-pushup' | 'wall-slide' | 'doorway' | 'hang' | 'dead-hang' | 'pullup'
-  | 'negative' | 'squat' | 'lunge' | 'hip-flexor' | 'bridge' | 'deadbug' | 'walk' | 'stretch';
+/** 동작 그림 키 (src/figure/demos.ts) */
+export type ArtKey = string;
 
 export interface Exercise {
   id: string;
@@ -23,7 +22,7 @@ export interface Exercise {
   mistakes?: string[];  // 자주 하는 잘못된 자세
   start?: string;       // 시작 자세
   feel?: string;        // 느껴져야 하는 곳
-  moves?: { name: string; dose: string; how: string[]; feel: string }[]; // 여러 동작 스트레칭
+  moves?: { name: string; dose: string; how: string[]; feel: string; art?: string }[]; // 여러 동작 스트레칭
   testHint?: string;    // 테스트 데이 측정 안내
   art: ArtKey;
   stage?: string;        // 단계 안내 (예: "보조 풀업이 통증 없이 가능해진 뒤")

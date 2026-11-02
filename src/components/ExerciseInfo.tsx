@@ -1,11 +1,13 @@
 import { AlertTriangle, Ban, Crosshair, Lightbulb, PersonStanding, Wind } from 'lucide-react';
 import type { Exercise } from '../types';
 import { Chip } from './ui';
+import { FigureDemo, FigureStill } from '../figure/Figure';
 
 /** 운동 방법 · 잘못된 자세 · 주의사항 · 호흡법 · 초보자 팁 */
-export function ExerciseInfo({ ex }: { ex: Exercise }) {
+export function ExerciseInfo({ ex, demo = true }: { ex: Exercise; demo?: boolean }) {
   return (
     <div className="space-y-5 text-[14px] leading-[1.6] text-body">
+      {demo && !ex.moves?.length && <FigureDemo art={ex.art} />}
       <div>
         <p className="text-ink">{ex.summary}</p>
         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -43,9 +45,16 @@ export function ExerciseInfo({ ex }: { ex: Exercise }) {
           <ol className="space-y-2.5">
             {ex.moves.map((m, k) => (
               <li key={m.name} className="rounded-sm border border-hairline p-3">
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-[14px] font-semibold text-ink"><span className="tabular mr-1.5 text-primary">{k + 1}</span>{m.name}</p>
-                  <span className="shrink-0 rounded-full bg-strong px-2 py-0.5 text-[11px] font-semibold text-ink">{m.dose}</span>
+                <div className="flex gap-3">
+                  {m.art && (
+                    <div className="grid h-[72px] w-[92px] shrink-0 place-items-center rounded-sm bg-soft">
+                      <FigureStill art={m.art} className="h-[64px] w-[86px]" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-semibold leading-[1.35] text-ink"><span className="tabular mr-1.5 text-primary">{k + 1}</span>{m.name}</p>
+                    <span className="mt-1 inline-block rounded-full bg-strong px-2 py-0.5 text-[11px] font-semibold text-ink">{m.dose}</span>
+                  </div>
                 </div>
                 <ul className="mt-1.5 space-y-1">{m.how.map((h) => <li key={h} className="flex gap-2"><span className="text-muted-soft">–</span>{h}</li>)}</ul>
                 <p className="mt-1.5 text-[12px] text-primary">느껴지는 곳 · {m.feel}</p>

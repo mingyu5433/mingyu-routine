@@ -4,9 +4,9 @@ import type { ArtKey, DayLog, DayPlan, ItemLog } from '../types';
 interface TestDef { exerciseId: string; label: string; art?: ArtKey; optional?: boolean }
 
 const UPPER_TESTS: TestDef[] = [
-  { exerciseId: 'pushup', label: '일반 푸쉬업 최대', art: 'scap-pushup' },
+  { exerciseId: 'pushup', label: '일반 푸쉬업 최대' },
   { exerciseId: 'dead-hang', label: '매달리기 최대 (발 떼고, 초)' },
-  { exerciseId: 'scap-pullup', label: '견갑 풀업 최대 (발 떼고)', art: 'dead-hang' },
+  { exerciseId: 'scap-pullup', label: '견갑 풀업 최대 (발 떼고)' },
   { exerciseId: 'deadbug', label: '데드버그 최대 (좌우 각)' },
 ];
 const LOWER_TESTS: TestDef[] = [

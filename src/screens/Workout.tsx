@@ -4,6 +4,7 @@ import { useStore } from '../lib/store';
 import { CATEGORY_LABEL, EXERCISES, formatTarget, getEx, unitLabel } from '../data/exercises';
 import { WEEKDAYS, WEEK_ORDER } from '../data/schedule';
 import { ExerciseArt } from '../components/ExerciseArt';
+import { FigureDemo } from '../figure/Figure';
 import { ExerciseInfo } from '../components/ExerciseInfo';
 import { Card, Chip, PrimaryButton, SectionTitle, Segmented, Sheet, Stepper } from '../components/ui';
 import { ScheduleView } from './Schedule';
@@ -47,7 +48,7 @@ function LibraryView() {
                 <button key={e.id} type="button" onClick={() => setSel(e.id)}
                   className="flex w-full items-center gap-3.5 rounded-md border border-hairline p-3 text-left">
                   <div className="grid h-[60px] w-[76px] shrink-0 place-items-center rounded-sm bg-soft">
-                    <ExerciseArt art={e.art} className="h-[48px] w-[68px]" />
+                    <ExerciseArt art={e.art} className="h-[52px] w-[70px]" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-[16px] font-semibold">{e.name}</p>
@@ -102,10 +103,7 @@ function ExerciseDetail({ id, onClose }: { id: string | null; onClose: () => voi
     <Sheet open={!!ex} onClose={() => { onClose(); setSaved(false); setGoal(null); }} title={ex?.name ?? ''}>
       {ex && g && (
         <div>
-          <div className="relative grid aspect-[3/2] place-items-center rounded-md bg-soft">
-            <ExerciseArt art={ex.art} className="h-[70%] w-[80%]" />
-            <span className="absolute left-3 top-3 rounded-full bg-canvas px-2.5 py-1 text-[11px] font-semibold shadow-float">측면 도해</span>
-          </div>
+          <FigureDemo art={ex.art} />
           <div className="mt-4 flex flex-wrap items-center gap-1.5">
             <Chip tone="ink">{CATEGORY_LABEL[ex.category]}</Chip>
             <Chip>{ex.part}</Chip>
@@ -153,7 +151,7 @@ function ExerciseDetail({ id, onClose }: { id: string | null; onClose: () => voi
             <p className="mt-2 text-[12px] text-muted">오늘 이미 체크한 세트가 있으면 오늘 기록은 그대로 두고 다음부터 반영됩니다.</p>
           </div>
 
-          <div className="mt-6"><ExerciseInfo ex={ex} /></div>
+          <div className="mt-6"><ExerciseInfo ex={ex} demo={false} /></div>
         </div>
       )}
     </Sheet>

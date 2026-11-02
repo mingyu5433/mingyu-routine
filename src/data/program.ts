@@ -92,5 +92,5 @@ export const variantName = (name: string, exId: string, level?: number) => {
 };
 export const variantArt = (exId: string, level?: number) => {
   const v = level ? stepAt(exId, level)?.variant : undefined;
-  return v === '일반' ? 'scap-pushup' as const : v === '무릎' ? 'knee-pushup' as const : undefined;
+  return v === '무릎' ? 'scap-pushup' : undefined;
 };

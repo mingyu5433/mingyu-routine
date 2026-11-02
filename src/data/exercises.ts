@@ -1,5 +1,6 @@
 import type { Exercise } from '../types';
 import { DETAIL } from './exerciseDetail';
+import { DEMOS } from '../figure/demos';
 
 export const EXERCISES: Exercise[] = [
   // ── A. 어깨 준비운동 ─────────────────────────────
@@ -324,6 +325,8 @@ EXERCISES.push({
 });
 
 for (const e of EXERCISES) if (DETAIL[e.id]) Object.assign(e, DETAIL[e.id]);
+// 동작 그림: 운동 id와 같은 이름의 그림이 있으면 그것을 사용
+for (const e of EXERCISES) if (DEMOS[e.id]) e.art = e.id;
 
 export const EX_MAP: Record<string, Exercise> = Object.fromEntries(EXERCISES.map((e) => [e.id, e]));
 export const getEx = (id: string): Exercise | undefined => EX_MAP[id];
