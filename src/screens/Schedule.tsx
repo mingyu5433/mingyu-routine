@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useStore } from '../lib/store';
 import { weekday } from '../lib/date';
 import { CATEGORY_LABEL, EXERCISES, formatTarget, getEx, unitLabel } from '../data/exercises';
-import { WEEKDAYS, WEEK_ORDER } from '../data/schedule';
+import { PRESET_LABEL, WEEKDAYS, WEEK_ORDER, type SchedulePreset } from '../data/schedule';
 import { Chip, PrimaryButton, SecondaryButton, Sheet, Stepper } from '../components/ui';
 import type { Category, DayPlan } from '../types';
 
@@ -61,13 +61,21 @@ export function ScheduleView() {
 
       <div className="mt-6 rounded-md bg-soft p-4 text-[14px] leading-[1.6] text-body">
         <p className="font-semibold text-ink">풀업 단계 안내</p>
-        <p className="mt-1">11월 2일 테스트에서 매달리기 60초가 나와, <b>견갑 풀업</b>과 <b>발 보조 풀업</b>으로 시작하고 2주차부터 <b>네거티브 풀업</b>이 자동으로 추가됩니다. 7주차(12월 20일 주간)에는 안전하다면 보조 없는 풀업 1회를 시도합니다.</p>
+        <p className="mt-1">11월 2일 테스트(매달리기 60초, 견갑 풀업 4회)를 바탕으로 <b>상체 B</b>에서 네거티브 풀업 → 발 보조 풀업 → 매달리기 순서로 등과 악력을 키우고, <b>상체 A</b>에서는 견갑 풀업으로 날개뼈를 다집니다. 7주차(12월 20일 주간)에는 안전하다면 보조 없는 풀업 1회를 시도합니다.</p>
       </div>
 
-      <button type="button" onClick={() => { if (confirm('주간 일정을 기본값으로 되돌릴까요? 기록은 유지됩니다.')) resetSchedule(); }}
-        className="mx-auto mt-6 flex items-center gap-1.5 text-[14px] text-muted underline-offset-4 active:underline">
-        <RotateCcw size={14} /> 기본 일정으로 되돌리기
-      </button>
+      <div className="mt-6 rounded-md border border-hairline p-4">
+        <p className="flex items-center gap-1.5 text-[14px] font-semibold"><RotateCcw size={14} />추천 일정으로 바꾸기</p>
+        <p className="mt-1 text-[12px] text-muted">직접 바꾼 일정은 사라지고, 기록은 그대로 남습니다.</p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {(Object.keys(PRESET_LABEL) as SchedulePreset[]).map((k) => (
+            <button key={k} type="button" onClick={() => { if (confirm(`'${PRESET_LABEL[k]}' 일정으로 바꿀까요?`)) resetSchedule(k); }}
+              className="rounded-sm border border-hairline px-3 py-3 text-left text-[13px] font-medium leading-[1.4]">
+              {PRESET_LABEL[k]}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <Sheet open={editing !== null && !!draft && !picker} onClose={close} title={`${editing !== null ? WEEKDAYS[editing] : ''}요일 일정`}>
         {draft && (

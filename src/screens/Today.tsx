@@ -150,6 +150,11 @@ export function TodayScreen() {
         <p className="mt-3 flex items-center justify-end gap-0.5 text-[13px] font-medium opacity-80">한 달 · 크리스마스 · 세 달 뒤 변화 보기 <ChevronRight size={14} /></p>
       </button>
 
+      {state.settings.kneeRest && (
+        <p className="mt-4 rounded-sm bg-soft px-3.5 py-3 text-[13px] leading-[1.55] text-body">
+          <b className="text-ink">무릎 회복 모드</b> · 무릎에 부담 가는 운동은 빼고 상체 A·B를 진행합니다. 계단이나 걷기에서도 통증이 없어지면 설정에서 끄고 '전신' 일정으로 바꿔 주세요.
+        </p>
+      )}
       <MonthlyRecap />
       <BackupReminder />
 

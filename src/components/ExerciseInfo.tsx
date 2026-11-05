@@ -2,9 +2,12 @@ import { AlertTriangle, Ban, Crosshair, Lightbulb, PersonStanding, Wind } from '
 import type { Exercise } from '../types';
 import { Chip } from './ui';
 import { FigureDemo, FigureStill } from '../figure/Figure';
+import { useStore } from '../lib/store';
 
 /** 운동 방법 · 잘못된 자세 · 주의사항 · 호흡법 · 초보자 팁 */
 export function ExerciseInfo({ ex, demo = true }: { ex: Exercise; demo?: boolean }) {
+  const knee = !!useStore().state.settings.kneeRest;
+  const moves = ex.moves?.filter((m) => !(knee && m.knee));
   return (
     <div className="space-y-5 text-[14px] leading-[1.6] text-body">
       {demo && !ex.moves?.length && <FigureDemo art={ex.art} />}
@@ -39,11 +42,12 @@ export function ExerciseInfo({ ex, demo = true }: { ex: Exercise; demo?: boolean
           <Crosshair size={15} className="mt-0.5 shrink-0" /><span><b>여기가 느껴지면 정상</b> · {ex.feel}</span>
         </p>
       )}
-      {ex.moves && ex.moves.length > 0 && (
+      {moves && moves.length > 0 && (
         <section>
           <h4 className="mb-2 text-[14px] font-semibold text-ink">순서대로 따라 하기</h4>
+          {knee && ex.moves!.length !== moves.length && <p className="mb-2 text-[12px] text-muted">무릎 회복 모드라 무릎을 깊게 굽히는 스트레칭은 뺐습니다.</p>}
           <ol className="space-y-2.5">
-            {ex.moves.map((m, k) => (
+            {moves.map((m, k) => (
               <li key={m.name} className="rounded-sm border border-hairline p-3">
                 <div className="flex gap-3">
                   {m.art && (

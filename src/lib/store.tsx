@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AppState, Condition, DayLog, DayPlan, ItemLog, Settings, SetLog } from '../types';
-import { defaultSchedule } from '../data/schedule';
+import { defaultSchedule, KNEE_LOAD, type SchedulePreset } from '../data/schedule';
 import { getEx } from '../data/exercises';
 import { todayKey, weekday } from './date';
 import { ADD_AFTER, firstWeek, PROGRAM, stepAt } from '../data/program';
@@ -25,7 +25,8 @@ export function defaultState(): AppState {
       goalDate: '2026-12-20',
       autoProgram: true,
       testDays: { '2026-11-02': 'upper', '2026-12-20': 'full' },
-      migV: 2,
+      migV: 3,
+      kneeRest: true,
       firstPullup: { achieved: false },
     },
     schedule: defaultSchedule(),
@@ -133,6 +134,16 @@ export function normalize(data: unknown): AppState {
   const settings = { ...d.settings, ...(s.settings ?? {}), testDays: { ...d.settings.testDays, ...(s.settings?.testDays ?? {}) } };
   let schedule = migrateSchedule(s.schedule && typeof s.schedule === 'object' ? { ...d.schedule, ...s.schedule } : d.schedule);
   if ((s.settings?.migV ?? 0) < 2) { schedule = migrateV2(schedule); settings.migV = 2; }
+  // v3 (11/5): 무릎 부상 → 상체 A/B 주 4회 강화 프로그램으로 일정 교체, 무릎 회복 모드 켜기
+  if ((s.settings?.migV ?? 0) < 3) {
+    schedule = defaultSchedule('upper');
+    settings.migV = 3;
+    settings.kneeRest = true;
+    const logs = { ...(s.logs ?? {}) };
+    const t = todayKey();
+    if (logs[t] && !logs[t].items.some((i) => i.sets.some((x) => x.done))) delete logs[t];
+    s.logs = logs;
+  }
   return {
     version: 1,
     settings,
@@ -148,17 +159,23 @@ const makeSets = (n: number, target: number) =>
 /** 일정 + (켜져 있으면) 추천 프로그램으로 그날의 기본 기록을 만듭니다. */
 export function buildDayLog(date: string, plan: DayPlan, state?: AppState): DayLog {
   const testKind = state?.settings.testDays?.[date];
-  if (testKind) return buildTestLog(date, testKind, plan);
+  if (testKind) {
+    const tl = buildTestLog(date, testKind, plan);
+    return state?.settings.kneeRest ? { ...tl, items: tl.items.filter((i) => !KNEE_LOAD.has(i.exerciseId)) } : tl;
+  }
   const auto = !!state?.settings.autoProgram;
+  const knee = !!state?.settings.kneeRest;
   const items: ItemLog[] = [];
   for (const p of plan.items) {
     if (!getEx(p.exerciseId)) continue;
+    if (knee && KNEE_LOAD.has(p.exerciseId)) continue;
+    const opt = p.optional ? { optional: true } : {};
     if (auto && PROGRAM[p.exerciseId]) {
       const { level, reason } = levelFor(state!, p.exerciseId, date);
       const step = stepAt(p.exerciseId, level);
-      if (step) { items.push({ exerciseId: p.exerciseId, sets: makeSets(step.sets, step.target), level, hold: reason }); continue; }
+      if (step) { items.push({ exerciseId: p.exerciseId, sets: makeSets(step.sets, step.target), level, hold: reason, ...opt }); continue; }
     }
-    items.push({ exerciseId: p.exerciseId, sets: makeSets(p.sets, p.target) });
+    items.push({ exerciseId: p.exerciseId, sets: makeSets(p.sets, p.target), ...opt });
   }
   if (auto) {
     const week = programWeek(state!.settings.startDate, date);
@@ -300,12 +317,12 @@ function useStoreValue(initial: AppState) {
         return { ...s, schedule, logs };
       });
     },
-    resetSchedule() {
+    resetSchedule(preset: SchedulePreset = 'upper') {
       setState((s) => {
         const logs = { ...s.logs };
         const t = todayKey();
         if (!hasDone(logs[t])) delete logs[t];
-        return { ...s, schedule: defaultSchedule(), logs };
+        return { ...s, schedule: defaultSchedule(preset), logs };
       });
     },
     updateSettings(patch: Partial<Settings>) {
@@ -313,7 +330,7 @@ function useStoreValue(initial: AppState) {
         const logs = { ...s.logs };
         const t = todayKey();
         // 프로그램 설정이 바뀌면 아직 시작하지 않은 오늘 목표를 다시 계산
-        if (('autoProgram' in patch || 'startDate' in patch) && !hasDone(logs[t])) delete logs[t];
+        if (('autoProgram' in patch || 'startDate' in patch || 'kneeRest' in patch) && !hasDone(logs[t])) delete logs[t];
         return { ...s, settings: { ...s.settings, ...patch }, logs };
       });
     },

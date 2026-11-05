@@ -56,7 +56,7 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
         </div>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-1.5">
-            <span className={`text-[12px] font-bold ${isTest ? 'text-primary' : 'text-muted'}`}>{isTest ? (item.optional ? '테스트 · 선택' : '테스트') : CATEGORY_LABEL[ex.category]}</span>
+            <span className={`text-[12px] font-bold ${isTest ? 'text-primary' : 'text-muted'}`}>{isTest ? (item.optional ? '테스트 · 선택' : '테스트') : item.optional ? `${CATEGORY_LABEL[ex.category]} · 선택` : CATEGORY_LABEL[ex.category]}</span>
             <span className="text-[12px] text-muted-soft">·</span>
             <span className="truncate text-[12px] text-muted">{ex.part}</span>
           </div>
@@ -87,6 +87,7 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
               <p className="flex items-center gap-1.5 font-semibold text-ink">
                 {item.hold ? <Pause size={13} /> : <Sparkles size={13} className="text-primary" />}
                 {item.hold === 'pain' ? '통증을 고려해 지난번 단계를 유지합니다'
+                  : item.hold === 'jump' ? `지난번 목표를 훨씬 넘겨서 한 단계 건너뛰었습니다 · ${item.level}단계`
                   : item.hold === 'miss' ? '지난 목표를 다 채우면 다음 단계로 올라갑니다'
                   : `추천 목표 · ${item.level}단계`}
               </p>

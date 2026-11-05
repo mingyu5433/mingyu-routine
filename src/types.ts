@@ -22,7 +22,7 @@ export interface Exercise {
   mistakes?: string[];  // 자주 하는 잘못된 자세
   start?: string;       // 시작 자세
   feel?: string;        // 느껴져야 하는 곳
-  moves?: { name: string; dose: string; how: string[]; feel: string; art?: string }[]; // 여러 동작 스트레칭
+  moves?: { name: string; dose: string; how: string[]; feel: string; art?: string; knee?: boolean }[]; // 여러 동작 스트레칭
   testHint?: string;    // 테스트 데이 측정 안내
   art: ArtKey;
   stage?: string;        // 단계 안내 (예: "보조 풀업이 통증 없이 가능해진 뒤")
@@ -32,6 +32,7 @@ export interface PlanItem {
   exerciseId: string;
   sets: number;
   target: number;
+  optional?: boolean; // 선택 운동 (안 해도 완료율에 영향 없음)
 }
 
 export interface DayPlan {
@@ -52,7 +53,7 @@ export interface ItemLog {
   exerciseId: string;
   sets: SetLog[];
   level?: number;          // 추천 프로그램 단계(주차)
-  hold?: 'miss' | 'pain';  // 단계를 올리지 않은 이유
+  hold?: 'miss' | 'pain' | 'jump';  // 단계 판단 이유
   test?: boolean;          // 테스트 데이의 최대 기록 항목
   label?: string;          // 표시 이름(테스트 항목)
   art?: ArtKey;            // 표시 도해(테스트 항목)
@@ -90,6 +91,7 @@ export interface Settings {
   recapSeen?: string;    // 확인한 월간 결산 (YYYY-MM)
   selfNote?: string;     // 나에게 한 마디 (화면 맨 아래)
   migV?: number;         // 적용된 데이터 이전 버전
+  kneeRest?: boolean;    // 무릎 회복 모드: 무릎에 부담 가는 운동 제외
   firstPullup: { achieved: boolean; date?: string };
 }
 

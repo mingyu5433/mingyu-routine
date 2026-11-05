@@ -41,11 +41,23 @@ export const DEMOS: Record<string, Demo> = {
       { p: pushBottom, label: '2~3초 동안 가슴이 바닥 가까이 · 팔꿈치는 몸통 쪽 30~45도', hold: 300, move: 1000 },
     ],
   },
-  'scap-pushup': {
-    props: [FLOOR, { t: 'arrow', a: [124, 82], b: [124, 68] }],
+  'close-pushup': {
+    thumb: 0,
+    props: [FLOOR, { t: 'arrow', a: [142, 68], b: [142, 92] }],
     frames: [
-      { p: { sh: [108, 76], torso: -32, hn: [108, 106], fn: [40, 108], tn: 180, hl: ['back'] }, label: '팔은 편 채 날개뼈 모으기 (가슴이 살짝 내려감)', hold: 300, move: 1000 },
-      { p: { sh: [108, 70], torso: -32, hn: [108, 106], fn: [40, 108], tn: 180, hl: ['back'] }, label: '바닥을 밀어 등 윗부분을 둥글게 올리기', hold: 300, move: 1000 },
+      { p: { ...pushTop, hn: [107, 106], hl: ['arm', 'chest'] }, label: '손은 가슴 아래로 좁게 · 몸은 일직선', hold: 700, move: 2500 },
+      { p: { ...pushBottom, sh: [113, 94], hn: [107, 106], hl: ['arm', 'chest'] }, label: '팔꿈치를 옆구리에 붙인 채 3초 동안 내려가기', hold: 300, move: 1000 },
+    ],
+  },
+  plank: {
+    props: [FLOOR],
+    frames: [{ p: { sh: [114, 90], torso: -7, eb: [-1, -1], hn: [134, 106], hf: [131, 105], fn: [33, 104], tn: 155, hl: ['core'] }, label: '팔꿈치는 어깨 아래 · 발뒤꿈치부터 머리까지 일직선으로 버티기' }],
+  },
+  'scap-pushup': {
+    props: [FLOOR, { t: 'arrow', a: [136, 80], b: [136, 64] }],
+    frames: [
+      { p: { sh: [112, 74], torso: -20, hn: [113, 106], fn: [33, 104], tn: 155, hl: ['back'] }, label: '발끝으로 서서 팔은 편 채 날개뼈 모으기 (가슴이 살짝 내려감)', hold: 300, move: 1000 },
+      { p: { sh: [112, 68], torso: -24, hn: [113, 106], fn: [33, 104], tn: 155, hl: ['back'] }, label: '바닥을 밀어 등 윗부분을 둥글게 올리기', hold: 300, move: 1000 },
     ],
   },
   'scap-pullup': {

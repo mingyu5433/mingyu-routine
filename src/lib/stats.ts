@@ -16,7 +16,7 @@ export const completion = (log?: DayLog) => {
 
 /** 세트를 하나라도 완료한 날 = 운동한 날 */
 export const isWorkoutDay = (log?: DayLog) => daySets(log).done > 0;
-export const isRestPlan = (plan?: DayPlan) => !plan || plan.items.length === 0;
+export const isRestPlan = (plan?: DayPlan) => !plan || plan.items.every((p) => p.optional);
 
 /** 예상 소요 시간(분) 범위 */
 export function estimateMinutes(log: DayLog, settings: Settings): [number, number] {

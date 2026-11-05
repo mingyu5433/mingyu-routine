@@ -5,7 +5,7 @@ import { diffDays } from './date';
 /** 시작일 기준 몇 주차인지 (1부터) */
 export const programWeek = (startDate: string, date: string) => Math.max(1, Math.floor(diffDays(date, startDate) / 7) + 1);
 
-export type HoldReason = 'miss' | 'pain';
+export type HoldReason = 'miss' | 'pain' | 'jump';
 
 /**
  * 오늘 적용할 단계를 기록으로 판단합니다.
@@ -16,7 +16,7 @@ export type HoldReason = 'miss' | 'pain';
 export function levelFor(state: AppState, exId: string, date: string): { level: number; reason?: HoldReason } {
   const cal = Math.min(PROGRAM_WEEKS, programWeek(state.settings.startDate, date));
   const from = firstWeek(exId);
-  let achieved = 0, lastLevel = 0;
+  let achieved = 0, lastLevel = 0, jumped = false;
   let lastPain = false;
   for (const d of Object.keys(state.logs).filter((k) => k < date).sort()) {
     const log = state.logs[d];
@@ -26,11 +26,18 @@ export function levelFor(state: AppState, exId: string, date: string): { level: 
     lastPain = log.condition === 'pain';
     const step = stepAt(exId, item.level);
     const full = item.sets.length >= (step?.sets ?? 0) && item.sets.every((s) => s.done && s.actual >= s.target);
-    if (full) achieved = Math.max(achieved, item.level);
+    if (full) {
+      // 모든 세트에서 목표보다 20% 이상(최소 2회) 더 했다면 한 단계 건너뛰기
+      const over = item.sets.every((s) => s.actual >= Math.max(s.target + 2, Math.ceil(s.target * 1.2)));
+      const got = over && item.level < PROGRAM_WEEKS ? item.level + 1 : item.level;
+      if (got > achieved) { achieved = got; jumped = over; }
+    }
   }
-  let level = Math.min(cal, Math.max(achieved + 1, from));
+  const cap = Math.min(PROGRAM_WEEKS, cal + (jumped ? 1 : 0));
+  let level = Math.min(cap, Math.max(achieved + 1, from));
   let reason: HoldReason | undefined;
   if (lastPain && lastLevel && level > lastLevel) { level = lastLevel; reason = 'pain'; }
+  else if (jumped && level > cal) reason = 'jump';
   else if (level < cal) reason = 'miss';
   return { level, reason };
 }

@@ -74,6 +74,9 @@ export function SettingsScreen({ onEditSchedule }: { onEditSchedule: () => void 
         <button onClick={onEditSchedule} className="flex w-full items-center gap-3 border-b border-hairline-soft px-4 py-4 text-left">
           <CalendarDays size={18} /><span className="flex-1 text-[15px] font-medium">운동 일정 수정</span><ChevronRight size={16} className="text-muted" />
         </button>
+        <Row title="무릎 회복 모드" desc="스쿼트·힙 브리지 등 무릎에 부담 가는 운동을 빼고 진행">
+          <Toggle label="무릎 회복 모드" checked={!!s.kneeRest} onChange={(v) => updateSettings({ kneeRest: v })} />
+        </Row>
         <Row title="추천 프로그램" desc="기록을 보고 매주 횟수·세트를 자동으로 정합니다">
           <Toggle label="추천 프로그램" checked={s.autoProgram} onChange={(v) => updateSettings({ autoProgram: v })} />
         </Row>
