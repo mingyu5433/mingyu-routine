@@ -1,8 +1,8 @@
 import type { AppState, DayLog, DayPlan, Settings } from '../types';
 import { getEx } from '../data/exercises';
-import { PHASES } from '../data/quotes';
 import { addDays, diffDays, weekStart, weekday } from './date';
 import { restFor } from './store';
+import { PLAN_PHASES, phaseIndex, phaseOfItem, planWeek } from './plan';
 
 export const daySets = (log?: DayLog) => {
   const sets = log?.items.flatMap((i) => (i.optional ? i.sets.filter((s) => s.done) : i.sets)) ?? [];
@@ -24,9 +24,10 @@ export function estimateMinutes(log: DayLog, settings: Settings): [number, numbe
   for (const item of log.items) {
     const ex = getEx(item.exerciseId);
     if (!ex) continue;
-    const rest = restFor(item.exerciseId, settings);
+    const main = phaseOfItem(item) === 'main';
+    const rest = main ? restFor(item.exerciseId, settings, item) : 10;
     item.sets.forEach((s, idx) => {
-      const sides = ex.perSide ? 2 : 1;
+      const sides = ex.each || ex.perSide ? 2 : 1;
       const work = ex.unit === 'min' ? s.target * 60 : ex.unit === 'sec' ? s.target * sides : s.target * 3 * sides;
       sec += work + (idx < item.sets.length - 1 ? rest : 30);
     });
@@ -38,11 +39,77 @@ export function estimateMinutes(log: DayLog, settings: Settings): [number, numbe
   return [lo, hi];
 }
 
-export function phaseOf(startDate: string, today: string) {
-  const day = Math.max(0, diffDays(today, startDate));
-  const week = Math.floor(day / 7) + 1;
-  const idx = week <= 2 ? 0 : week <= 6 ? 1 : 2;
-  return { day: day + 1, week, idx, phase: PHASES[idx], adapting: week <= 2 };
+/** 8주 프로그램 진행 단계 */
+export function phaseOf(state: AppState, today: string) {
+  const week = planWeek(state, today);
+  const idx = phaseIndex(Math.max(1, week));
+  return { week, idx, phase: PLAN_PHASES[idx], adapting: week <= 2, before: week < 1 };
+}
+
+// ── 통계 화면용 ──────────────────────────────────────
+export type DayMark = 'full' | 'part' | 'missed' | 'planned' | 'rest' | 'rest-done';
+/** 이번 주(월~일) 요일별 상태 */
+export function weekStrip(state: AppState, today: string) {
+  const ws = weekStart(today);
+  return Array.from({ length: 7 }, (_, k) => {
+    const d = addDays(ws, k);
+    const log = state.logs[d];
+    const rest = isRestPlan(state.schedule[weekday(d)]) && !log?.items.some((i) => i.test);
+    let mark: DayMark;
+    if (rest) mark = isWorkoutDay(log) ? 'rest-done' : 'rest';
+    else if (completion(log) === 100) mark = 'full';
+    else if (isWorkoutDay(log)) mark = 'part';
+    else mark = d < today ? 'missed' : 'planned';
+    return { d, mark };
+  });
+}
+
+/** 최근 n개월 운동한 날 수 */
+export function monthlyCounts(state: AppState, today: string, n = 4) {
+  const [y, m] = today.split('-').map(Number);
+  return Array.from({ length: n }, (_, k) => {
+    const mm = m - (n - 1 - k);
+    const yy = y + Math.floor((mm - 1) / 12);
+    const mo = ((mm - 1) % 12 + 12) % 12 + 1;
+    const prefix = `${yy}-${String(mo).padStart(2, '0')}-`;
+    const days = Object.keys(state.logs).filter((d) => d.startsWith(prefix) && isWorkoutDay(state.logs[d])).length;
+    return { label: `${mo}월`, value: days };
+  });
+}
+
+/** 최근 n주 주별 합계 */
+export function weeklySum(state: AppState, today: string, n: number, f: (log: DayLog) => number) {
+  const ws = weekStart(today);
+  return Array.from({ length: n }, (_, k) => {
+    const start = addDays(ws, -7 * (n - 1 - k));
+    let v = 0;
+    for (let i = 0; i < 7; i++) { const l = state.logs[addDays(start, i)]; if (l) v += f(l); }
+    const [, mo, dd] = start.split('-').map(Number);
+    return { label: k === n - 1 ? '이번 주' : `${mo}/${dd}`, value: v };
+  });
+}
+export const cardioMinutes = (log: DayLog) => log.items.filter((i) => getEx(i.exerciseId)?.category === 'cardio').reduce((a, i) => a + i.sets.filter((s) => s.done).reduce((b, s) => b + s.actual, 0), 0);
+
+/** 운동별 세션 최고 기록 추이 (테스트 포함) */
+export function bestSeries(state: AppState, exIds: string[], n = 8) {
+  return Object.keys(state.logs).sort()
+    .map((d) => {
+      const its = state.logs[d].items.filter((i) => exIds.includes(i.exerciseId) && (i.test || phaseOfItem(i) === 'main'));
+      const best = Math.max(0, ...its.flatMap((i) => i.sets.filter((s) => s.done).map((s) => s.actual)));
+      const it = its.find((i) => i.sets.some((s) => s.done && s.actual === best));
+      return { d, best, test: !!it?.test, ex: it?.exerciseId, lv: it?.lv, label: it?.label };
+    })
+    .filter((x) => x.best > 0).slice(-n);
+}
+
+/** 통증 기록 (운동 전 체크 · 운동 후 기록) */
+export function painLog(state: AppState) {
+  return Object.keys(state.logs).sort().reverse().flatMap((d) => {
+    const l = state.logs[d];
+    const areas = [...new Set([...(l.check?.pain ?? []), ...(l.after?.pain ?? [])])];
+    if (!areas.length && l.condition !== 'pain') return [];
+    return [{ d, areas, when: l.after?.pain.length ? '운동 중' : '운동 전', memo: l.after?.memo ?? '' }];
+  });
 }
 
 export function computeStats(state: AppState, today: string) {

@@ -1,5 +1,6 @@
 import type { Exercise } from '../types';
 import { DETAIL } from './exerciseDetail';
+import { SPEC_EXERCISES, SPEC_OVERRIDE } from './spec';
 import { DEMOS } from '../figure/demos';
 
 export const EXERCISES: Exercise[] = [
@@ -361,6 +362,12 @@ EXERCISES.push({
 });
 
 for (const e of EXERCISES) if (DETAIL[e.id]) Object.assign(e, DETAIL[e.id]);
+// 명세서(2026-11-08) 반영: 새 운동 추가, 기존 운동 덮어쓰기
+for (const e of SPEC_EXERCISES) {
+  const i = EXERCISES.findIndex((x) => x.id === e.id);
+  if (i >= 0) EXERCISES[i] = e; else EXERCISES.push(e);
+}
+for (const e of EXERCISES) if (SPEC_OVERRIDE[e.id]) Object.assign(e, SPEC_OVERRIDE[e.id]);
 // 동작 그림: 운동 id와 같은 이름의 그림이 있으면 그것을 사용
 for (const e of EXERCISES) if (DEMOS[e.id]) e.art = e.id;
 
@@ -372,13 +379,20 @@ export const CATEGORY_LABEL: Record<Exercise['category'], string> = {
   strength: '근력',
   pull: '풀업',
   cardio: '유산소',
-  mobility: '마무리',
+  mobility: '스트레칭',
 };
 
 export function formatTarget(ex: Exercise, target: number): string {
-  if (ex.unit === 'sec') return ex.perSide ? `좌우 각 ${target}초` : `${target}초`;
-  if (ex.unit === 'min') return `${target}분`;
-  return ex.perSide ? `좌우 각 ${target}회` : `${target}회`;
+  const each = ex.each ?? (ex.perSide ? '좌우 각' : '');
+  const u = unitLabel(ex);
+  return `${each ? each + ' ' : ''}${target}${u}`;
+}
+
+/** 범위 표기 (예: 6~12회) */
+export function formatRange(ex: Exercise, r?: [number, number]): string {
+  if (!r || r[0] === r[1]) return '';
+  const each = ex.each ?? (ex.perSide ? '좌우 각' : '');
+  return `${each ? each + ' ' : ''}${r[0]}~${r[1]}${unitLabel(ex)}`;
 }
 
 export function unitLabel(ex: Exercise): string {

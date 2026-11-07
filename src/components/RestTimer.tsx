@@ -7,7 +7,7 @@ import { chime, haptic } from '../lib/feedback';
  * 휴식 타이머. 종료 예정 시각(endAt)을 저장해 두고 매 틱마다 남은 시간을 계산하므로,
  * iOS에서 앱이 백그라운드로 가서 setInterval이 멈춰도 돌아왔을 때 정확한 시간이 표시됩니다.
  */
-export function RestTimer() {
+export function RestTimer({ offset = 'bottom-[calc(68px+env(safe-area-inset-bottom))]', z = 'z-40' }: { offset?: string; z?: string }) {
   const { state, pauseTimer, resumeTimer, addTimer, stopTimer } = useStore();
   const t = state.timer;
   const [now, setNow] = useState(Date.now());
@@ -47,7 +47,7 @@ export function RestTimer() {
   const R = 22, C = 2 * Math.PI * R;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(68px+env(safe-area-inset-bottom))] z-40 flex justify-center px-4">
+    <div className={`pointer-events-none fixed inset-x-0 ${offset} ${z} flex justify-center px-4`}>
       <div className="animate-rise pointer-events-auto flex w-full max-w-[528px] items-center gap-3 rounded-full border border-hairline bg-canvas py-2 pl-2 pr-2 shadow-float">
         <div className="relative h-[52px] w-[52px] shrink-0">
           <svg viewBox="0 0 52 52" className="h-full w-full -rotate-90">

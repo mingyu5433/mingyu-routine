@@ -26,6 +26,6 @@ function One({ k, i }: { k: string; i: number }) {
 }
 createRoot(document.getElementById('g')!).render(
   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, padding: 8, width: 1300 }}>
-    {Object.keys(DEMOS).filter((k) => !k.includes('#')).map((k) => <Frames key={k} k={k} />)}
+    {Object.keys(DEMOS).filter((k) => !k.includes('#') && (!location.search || location.search.slice(1).split(',').includes(k))).map((k) => <Frames key={k} k={k} />)}
   </div>,
 );

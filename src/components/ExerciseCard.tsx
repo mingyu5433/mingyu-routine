@@ -1,8 +1,8 @@
-import { Check, ChevronDown, Gauge, Pause, Pencil, Plus, Settings2, Sparkles, Trash2 } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, Gauge, Pencil, Plus, Settings2, Sparkles, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ItemLog } from '../types';
-import { CATEGORY_LABEL, formatTarget, getEx, unitLabel } from '../data/exercises';
-import { stepAt, variantArt, variantName } from '../data/program';
+import { CATEGORY_LABEL, formatRange, formatTarget, getEx, unitLabel } from '../data/exercises';
+import type { Suggestion } from '../lib/plan';
 import { timeLabel } from '../lib/date';
 import { ExerciseArt } from './ExerciseArt';
 import { Stepper } from './ui';
@@ -18,9 +18,14 @@ interface Props {
   onTarget: (setIdx: number, target: number) => void;
   onAdd: () => void;
   onRemove: (setIdx: number) => void;
+  warning?: string | null;
+  suggestion?: Suggestion;
+  onAccept?: () => void;
+  onSnooze?: () => void;
+  hideDemo?: boolean;
 }
 
-export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord, onTarget, onAdd, onRemove }: Props) {
+export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord, onTarget, onAdd, onRemove, warning, suggestion, onAccept, onSnooze, hideDemo }: Props) {
   const ex = getEx(item.exerciseId);
   const ex0 = getEx(item.exerciseId);
   // 준비운동·스트레칭은 따라 하기 쉽도록 설명을 펼친 채로 보여 줍니다
@@ -37,7 +42,8 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
   const target = item.sets[0]?.target ?? ex.defaultTarget;
   const sameTarget = item.sets.every((s) => s.target === target);
   const goal = isTest ? (complete ? `기록 ${formatTarget(ex, item.sets[0].actual)}` : '1세트 · 바른 자세로 가능한 최대') : `${total}세트 × ${sameTarget ? formatTarget(ex, target) : '세트별 목표'}`;
-  const step = item.level ? stepAt(ex.id, item.level) : null;
+  const range = formatRange(ex, item.range);
+  const level = item.lv !== undefined ? ex.levels?.[item.lv] : undefined;
   const u = unitLabel(ex);
 
   const startEdit = (j: number) => { setEditing(j); setDraft(item.sets[j].done ? item.sets[j].actual : isTest ? ex.defaultTarget : item.sets[j].target); };
@@ -47,7 +53,7 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
       <button type="button" onClick={() => onOpenChange(!open)} aria-expanded={open}
         className="flex w-full items-center gap-3.5 p-3 text-left">
         <div className={`relative grid h-[68px] w-[84px] shrink-0 place-items-center rounded-sm ${complete ? 'bg-primary-tint text-primary' : 'bg-soft text-ink'}`}>
-          <ExerciseArt art={item.art ?? variantArt(ex.id, item.level) ?? ex.art} className="h-[62px] w-[80px]" halo={complete ? 'var(--c-primary-tint)' : 'var(--c-surface-soft)'} />
+          <ExerciseArt art={item.art ?? (ex.id === 'incline-pushup' && item.lv === 2 ? 'pushup' : ex.art)} className="h-[62px] w-[80px]" halo={complete ? 'var(--c-primary-tint)' : 'var(--c-surface-soft)'} />
           {complete && (
             <span className="animate-pop absolute -right-1.5 -top-1.5 grid h-6 w-6 place-items-center rounded-full bg-primary text-on-primary">
               <Check size={14} strokeWidth={3} />
@@ -60,8 +66,9 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
             <span className="text-[12px] text-muted-soft">·</span>
             <span className="truncate text-[12px] text-muted">{ex.part}</span>
           </div>
-          <h3 className={`text-[16px] font-semibold leading-tight ${complete ? 'text-muted' : ''}`}>{item.label ?? variantName(ex.name, ex.id, item.level)}</h3>
-          <p className="mt-1 text-[14px] text-muted tabular">{goal}</p>
+          <h3 className={`text-[16px] font-semibold leading-tight ${complete ? 'text-muted' : ''}`}>{item.label ?? ex.name}</h3>
+          <p className="mt-1 text-[14px] text-muted tabular">{goal}{range && !isTest ? <span className="text-muted-soft"> · 범위 {range}</span> : null}</p>
+          {level && <p className="mt-0.5 truncate text-[12px] font-semibold text-primary">난도 · {level.name}</p>}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <span className="tabular text-[14px] font-semibold">
@@ -81,17 +88,20 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
               {ex.testHint && <p className="mt-1 font-semibold">{ex.testHint}</p>}
             </div>
           )}
-          {/* 추천 프로그램 안내 */}
-          {item.level && (
-            <div className="mt-3 rounded-sm bg-soft px-3 py-2.5 text-[13px] leading-[1.5]">
-              <p className="flex items-center gap-1.5 font-semibold text-ink">
-                {item.hold ? <Pause size={13} /> : <Sparkles size={13} className="text-primary" />}
-                {item.hold === 'pain' ? '통증을 고려해 지난번 단계를 유지합니다'
-                  : item.hold === 'jump' ? `지난번 목표를 훨씬 넘겨서 한 단계 건너뛰었습니다 · ${item.level}단계`
-                  : item.hold === 'miss' ? '지난 목표를 다 채우면 다음 단계로 올라갑니다'
-                  : `추천 목표 · ${item.level}단계`}
-              </p>
-              {step?.note && <p className="mt-0.5 text-body">{step.note}</p>}
+          {warning && (
+            <p className="mt-3 flex gap-2 rounded-sm border border-error/40 px-3 py-2.5 text-[13px] leading-[1.5] text-body">
+              <AlertTriangle size={15} className="mt-0.5 shrink-0 text-error" />{warning}
+            </p>
+          )}
+          {ex.purpose && !isTest && <p className="mt-3 text-[13px] leading-[1.5] text-muted"><b className="text-ink">목적</b> · {ex.purpose}</p>}
+          {suggestion && (
+            <div className="mt-3 rounded-sm bg-primary-tint px-3 py-2.5 text-[13px] leading-[1.5]">
+              <p className="flex items-center gap-1.5 font-semibold text-primary"><Sparkles size={13} />{suggestion.title}</p>
+              <p className="mt-0.5 text-body">{suggestion.detail}</p>
+              <div className="mt-2 flex gap-2">
+                <button type="button" onClick={onAccept} className="h-9 rounded-sm bg-primary px-3.5 text-[13px] font-semibold text-on-primary">적용하기</button>
+                <button type="button" onClick={onSnooze} className="h-9 rounded-sm px-3 text-[13px] font-medium text-muted">나중에</button>
+              </div>
             </div>
           )}
 
@@ -167,7 +177,7 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
             {ex.category === 'warmup' || ex.category === 'mobility' ? '동작 안내 접기 · 펼치기' : '운동 방법 · 주의사항 보기'}
             <ChevronDown size={16} className={`transition-transform ${info ? 'rotate-180' : ''}`} />
           </button>
-          {info && <div className="px-1 pb-1 pt-4"><ExerciseInfo ex={ex} /></div>}
+          {info && <div className="px-1 pb-1 pt-4"><ExerciseInfo ex={ex} demo={!hideDemo} /></div>}
 
           {!isTest && <button type="button" onClick={() => { setManage((v) => !v); setEditing(null); }}
             className="mx-auto mt-3 flex items-center gap-1 text-[12px] text-muted underline-offset-2 active:underline">

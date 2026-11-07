@@ -1,9 +1,9 @@
-import { CalendarDays, ChevronRight, Moon, Share, SmartphoneNfc, Sun, SunMoon, Trash2, Upload } from 'lucide-react';
+import { CalendarDays, ChevronRight, Moon, Share, SmartphoneNfc, Sun, SunMoon, Trash2, Upload, FileSpreadsheet } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
 import { defaultState, normalize, useStore } from '../lib/store';
 import { todayKey } from '../lib/date';
 import { BackupButton } from '../components/Backup';
-import { daysSince } from '../lib/backup';
+import { daysSince, exportCsv } from '../lib/backup';
 import { Card, SectionTitle, Segmented, Stepper, Toggle } from '../components/ui';
 import type { Settings } from '../types';
 
@@ -77,15 +77,23 @@ export function SettingsScreen({ onEditSchedule }: { onEditSchedule: () => void 
         <Row title="무릎 회복 모드" desc="스쿼트·힙 브리지 등 무릎에 부담 가는 운동을 빼고 진행">
           <Toggle label="무릎 회복 모드" checked={!!s.kneeRest} onChange={(v) => updateSettings({ kneeRest: v })} />
         </Row>
-        <Row title="추천 프로그램" desc="기록을 보고 매주 횟수·세트를 자동으로 정합니다">
-          <Toggle label="추천 프로그램" checked={s.autoProgram} onChange={(v) => updateSettings({ autoProgram: v })} />
+        <Row title="8주 진행 반영" desc="적응 단계 세트 제한 · 수락한 목표와 난도를 오늘 목표에 반영">
+          <Toggle label="8주 진행 반영" checked={s.autoProgram} onChange={(v) => updateSettings({ autoProgram: v })} />
+        </Row>
+        <Row title="8주 프로그램 시작일" desc="이 날이 1주차 · 1~2주차는 적응 단계">
+          <input type="date" value={s.planStart ?? ''}
+            onChange={(e) => e.target.value && updateSettings({ planStart: e.target.value })}
+            className="h-10 rounded-sm border border-hairline bg-canvas px-2.5 text-[14px] outline-none focus:border-ink" />
+        </Row>
+        <Row title="근력운동 목표 세트" desc={s.fullSets ? '목표 세트(3세트)로 진행 중' : '적응 단계: 최대 2세트'}>
+          <Toggle label="목표 세트로 늘리기" checked={!!s.fullSets} onChange={(v) => updateSettings({ fullSets: v })} />
         </Row>
         <Row title="목표일" desc="홈 화면 D-day 기준">
           <input type="date" value={s.goalDate} min={s.startDate}
             onChange={(e) => e.target.value && updateSettings({ goalDate: e.target.value })}
             className="h-10 rounded-sm border border-hairline bg-canvas px-2.5 text-[14px] outline-none focus:border-ink" />
         </Row>
-        <Row title="시작일" desc="프로그램 1주차 · 적응기 2주의 기준" last>
+        <Row title="처음 시작한 날" desc="하단 '시작한 지 N일째' 기준" last>
           <input type="date" value={s.startDate} max={todayKey()}
             onChange={(e) => e.target.value && updateSettings({ startDate: e.target.value })}
             className="h-10 rounded-sm border border-hairline bg-canvas px-2.5 text-[14px] outline-none focus:border-ink" />
@@ -105,6 +113,9 @@ export function SettingsScreen({ onEditSchedule }: { onEditSchedule: () => void 
 
       <SectionTitle>데이터</SectionTitle>
       <Card>
+        <button onClick={() => exportCsv(state)} className="flex w-full items-center gap-3 border-b border-hairline-soft px-4 py-4 text-left">
+          <FileSpreadsheet size={18} /><span className="flex-1 text-[15px] font-medium">기록을 CSV로 내보내기 (엑셀용)</span>
+        </button>
         <button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-3 border-b border-hairline-soft px-4 py-4 text-left">
           <Upload size={18} /><span className="flex-1 text-[15px] font-medium">백업 가져오기 (복원)</span>
         </button>

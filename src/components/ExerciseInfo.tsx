@@ -1,4 +1,4 @@
-import { AlertTriangle, Ban, Crosshair, Lightbulb, PersonStanding, Wind } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, Ban, Check, Crosshair, Lightbulb, PersonStanding, SlidersHorizontal, Wind } from 'lucide-react';
 import type { Exercise } from '../types';
 import { Chip } from './ui';
 import { FigureDemo, FigureStill } from '../figure/Figure';
@@ -6,7 +6,9 @@ import { useStore } from '../lib/store';
 
 /** 운동 방법 · 잘못된 자세 · 주의사항 · 호흡법 · 초보자 팁 */
 export function ExerciseInfo({ ex, demo = true }: { ex: Exercise; demo?: boolean }) {
-  const knee = !!useStore().state.settings.kneeRest;
+  const store = useStore();
+  const knee = !!store.state.settings.kneeRest;
+  const lvNow = store.state.settings.exState?.[ex.id]?.lv ?? 0;
   const moves = ex.moves?.filter((m) => !(knee && m.knee));
   return (
     <div className="space-y-5 text-[14px] leading-[1.6] text-body">
@@ -73,18 +75,46 @@ export function ExerciseInfo({ ex, demo = true }: { ex: Exercise; demo?: boolean
           <ul className="space-y-1.5">{ex.mistakes.map((t, k) => <li key={k} className="flex gap-2"><span className="text-error">×</span>{t}</li>)}</ul>
         </section>
       )}
-      <section>
-        <h4 className="mb-2 flex items-center gap-1.5 text-[14px] font-semibold text-ink"><AlertTriangle size={15} className="text-error" />주의사항</h4>
-        <ul className="space-y-1.5">{ex.cautions.map((t, k) => <li key={k} className="flex gap-2"><span className="text-muted-soft">–</span>{t}</li>)}</ul>
-      </section>
+      {ex.cautions.length > 0 && (
+        <section>
+          <h4 className="mb-2 flex items-center gap-1.5 text-[14px] font-semibold text-ink"><AlertTriangle size={15} className="text-error" />주의사항</h4>
+          <ul className="space-y-1.5">{ex.cautions.map((t, k) => <li key={k} className="flex gap-2"><span className="text-muted-soft">–</span>{t}</li>)}</ul>
+        </section>
+      )}
+      {ex.alt && (
+        <section>
+          <h4 className="mb-2 flex items-center gap-1.5 text-[14px] font-semibold text-ink"><ArrowLeftRight size={15} />대체 운동</h4>
+          <p>{ex.alt}</p>
+        </section>
+      )}
+      {ex.levels && ex.levels.length > 0 && (
+        <section>
+          <h4 className="mb-1 flex items-center gap-1.5 text-[14px] font-semibold text-ink"><SlidersHorizontal size={15} />난도 조절</h4>
+          <p className="mb-2 text-[12px] text-muted">지금 단계를 직접 바꿀 수 있습니다. 바꾸면 목표 횟수는 범위의 시작 값으로 돌아갑니다.</p>
+          <ol className="space-y-1.5">
+            {ex.levels.map((l, i) => (
+              <li key={l.name}>
+                <button type="button" disabled={i === lvNow}
+                  onClick={() => { if (confirm(`난도를 '${l.name}'(으)로 바꿀까요?`)) store.setExState(ex.id, { lv: i, bump: 0 }); }}
+                  className={`flex w-full gap-2.5 rounded-sm border px-3 py-2.5 text-left ${i === lvNow ? 'border-primary bg-primary-tint' : 'border-hairline'}`}>
+                  <span className={`tabular mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${i === lvNow ? 'bg-primary text-on-primary' : 'bg-strong text-muted'}`}>{i === lvNow ? <Check size={12} strokeWidth={3} /> : i + 1}</span>
+                  <span><b className="text-ink">{l.name}</b>{i === lvNow ? ' · 지금 단계' : ''}<br /><span className="text-[13px] text-muted">{l.how}</span></span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
       <section>
         <h4 className="mb-2 flex items-center gap-1.5 text-[14px] font-semibold text-ink"><Wind size={15} />호흡법</h4>
         <p>{ex.breathing}</p>
       </section>
-      <section>
-        <h4 className="mb-2 flex items-center gap-1.5 text-[14px] font-semibold text-ink"><Lightbulb size={15} />초보자 팁</h4>
-        <ul className="space-y-1.5">{ex.tips.map((t, k) => <li key={k} className="flex gap-2"><span className="text-muted-soft">–</span>{t}</li>)}</ul>
-      </section>
+      {ex.tips.length > 0 && (
+        <section>
+          <h4 className="mb-2 flex items-center gap-1.5 text-[14px] font-semibold text-ink"><Lightbulb size={15} />초보자 팁</h4>
+          <ul className="space-y-1.5">{ex.tips.map((t, k) => <li key={k} className="flex gap-2"><span className="text-muted-soft">–</span>{t}</li>)}</ul>
+        </section>
+      )}
     </div>
   );
 }

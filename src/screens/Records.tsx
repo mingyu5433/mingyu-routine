@@ -1,12 +1,12 @@
-import { Award, Check, ChevronLeft, ChevronRight, Flame, TrendingUp, Trophy } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Trophy } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useStore } from '../lib/store';
 import { daysInMonth, longLabel, pad, parts, timeLabel, weekday } from '../lib/date';
 import {
-  completion, computeStats, dayKinds, daySets, growthMessage, isWorkoutDay, monthSummary, phaseOf, weekCompare, weeklySeries,
+  bestSeries, cardioMinutes, completion, computeStats, dayKinds, daySets, isWorkoutDay, monthlyCounts, monthSummary, painLog, phaseOf, weekStrip, weeklySum,
 } from '../lib/stats';
+import { AREA_LABEL, PLAN_PHASES, PLAN_WEEKS, suggestions } from '../lib/plan';
 import { EXERCISES, formatTarget, getEx, unitLabel } from '../data/exercises';
-import { PHASES } from '../data/quotes';
 import { Card, Chip, PrimaryButton, SectionTitle, Segmented, Sheet } from '../components/ui';
 import { ChangePreviewSheet } from '../components/Boost';
 
@@ -95,11 +95,9 @@ function MonthView({ onPick }: { onPick: (d: string) => void }) {
         </div>
       </Card>
 
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <MiniStat label="운동한 날" value={sum.days.length} unit="일" />
-        <MiniStat label="모두 완료" value={sum.full} unit="일" />
-        <MiniStat label="걷기" value={sum.walkMin} unit="분" />
-      </div>
+      <p className="mt-4 rounded-md bg-soft px-4 py-3 text-[14px] leading-[1.6] text-body">
+        {ym.m}월에는 <b className="tabular text-ink">{sum.days.length}일</b> 운동했고, 그중 <b className="tabular text-ink">{sum.full}일</b>은 모두 완료했습니다. 걷기는 총 <b className="tabular text-ink">{sum.walkMin}분</b>입니다.
+      </p>
 
       <SectionTitle right={<span className="text-[13px] text-muted tabular">총 {sum.sets}세트</span>}>{ym.m}월에 운동한 날</SectionTitle>
       {sum.days.length === 0 ? (
@@ -138,157 +136,168 @@ function MonthView({ onPick }: { onPick: (d: string) => void }) {
 }
 
 /* ───────────── 통계 · 성장 ───────────── */
+function Bars({ data, unit, highlightLast = true, note }: { data: { label: string; value: number; tag?: string }[]; unit: string; highlightLast?: boolean; note?: string }) {
+  const max = Math.max(1, ...data.map((d) => d.value));
+  if (!data.length) return <p className="py-3 text-[13px] text-muted">아직 기록이 없습니다. 운동을 기록하면 여기에 그래프가 쌓입니다.</p>;
+  return (
+    <div>
+      <div className="flex h-32 items-end gap-2">
+        {data.map((d, i) => (
+          <div key={i} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
+            <span className="tabular text-[11px] font-semibold">{d.value}</span>
+            <div className="flex w-full max-w-[36px] flex-1 items-end">
+              <div className={`w-full rounded-t-[5px] ${highlightLast && i === data.length - 1 ? 'bg-primary' : d.tag ? 'bg-ink' : 'bg-border-strong'}`} style={{ height: `${Math.max(4, (d.value / max) * 100)}%` }} />
+            </div>
+            <span className="tabular max-w-full truncate text-[10px] text-muted">{d.label}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-muted">{unit}{note ? ` · ${note}` : ''}</p>
+    </div>
+  );
+}
+
+function Row({ k, v }: { k: string; v: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-2.5">
+      <span className="text-[14px] text-body">{k}</span>
+      <span className="tabular text-right text-[15px] font-semibold">{v}</span>
+    </div>
+  );
+}
+
 function StatsView() {
-  const { state, today, updateSettings } = useStore();
+  const { state, today, updateSettings, acceptSuggestion, snoozeSuggestion } = useStore();
   const st = useMemo(() => computeStats(state, today), [state, today]);
-  const cmp = useMemo(() => weekCompare(state, today), [state, today]);
-  const ph = phaseOf(state.settings.startDate, today);
+  const strip = useMemo(() => weekStrip(state, today), [state, today]);
+  const ph = phaseOf(state, today);
   const fp = state.settings.firstPullup;
-  const exStats = EXERCISES.filter((e) => st.perEx[e.id]);
-  const [series, setSeries] = useState<string>('');
   const [preview, setPreview] = useState(false);
-  const points = useMemo(() => weeklySeries(state, today, series || undefined), [state, today, series]);
-  const seriesEx = series ? getEx(series) : undefined;
-  const maxV = Math.max(1, ...points.map((p) => p.value));
-  const graphOptions = ['pushup', 'incline-pushup', 'foot-pullup', 'squat', 'hip-bridge', 'brisk-walk'].filter((id) => st.perEx[id]);
+  const sugs = useMemo(() => suggestions(state, today), [state, today]);
+  const months = useMemo(() => monthlyCounts(state, today, 4), [state, today]);
+  const minutes = useMemo(() => weeklySum(state, today, 6, (l) => l.after?.minutes ?? 0), [state, today]);
+  const cardio = useMemo(() => weeklySum(state, today, 6, cardioMinutes), [state, today]);
+  const pushS = useMemo(() => bestSeries(state, ['incline-pushup', 'pushup']), [state]);
+  const pullS = useMemo(() => bestSeries(state, ['foot-pullup']), [state]);
+  const squatS = useMemo(() => bestSeries(state, ['squat']), [state]);
+  const pains = useMemo(() => painLog(state), [state]);
+  const totalMin = Object.values(state.logs).reduce((a, l) => a + (l.after?.minutes ?? 0), 0);
+  const planned = strip.filter((x) => !x.mark.startsWith('rest') && x.d <= today).length;
+  const doneW = strip.filter((x) => x.mark === 'full' || x.mark === 'part').length;
+  const pullLv = state.settings.exState?.['foot-pullup']?.lv ?? 0;
+  const pullEx = getEx('foot-pullup');
+  const pushLv = state.settings.exState?.['incline-pushup']?.lv ?? 0;
+  const pushEx = getEx('incline-pushup');
+  const exStats = EXERCISES.filter((e) => st.perEx[e.id]);
+  const lab = (x: { d: string; test: boolean }) => `${parts(x.d).m}/${parts(x.d).d}${x.test ? '*' : ''}`;
 
   return (
     <>
-      <p className="mt-5 text-[14px] text-muted">
-        {st.totalDays === 0 ? '첫 기록이 시작될 자리입니다. 오늘 한 세트부터 가볍게.' : `지금까지 ${st.totalDays}일 동안 몸을 움직였습니다.`}
-      </p>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <Stat label="이번 주 운동한 날" value={st.weekDays} unit="일" sub={`계획 ${st.weekPlanned}일 중`} />
-        <Stat label="주간 지속률" value={st.weekRate} unit="%" sub="오늘까지 계획 대비" />
-        <Stat label="연속 운동" value={st.streak} unit="일" sub="휴식일은 이어서 계산" icon={<Flame size={14} className="text-primary" />} />
-        <Stat label="총 완료 세트" value={st.totalSets} unit="세트" sub="누적" />
-      </div>
-
-      {/* 실제 기록 기반 성장 비교 */}
-      <SectionTitle>지난주와 비교</SectionTitle>
-      <Card className="p-4">
-        {!cmp.hasNow ? (
-          <p className="text-[14px] leading-[1.6] text-muted">이번 주 기록이 쌓이면 지난주 같은 기간({cmp.span === 0 ? '월요일' : `월~${WD_SHORT[(cmp.span + 1) % 7]}`})과 비교해 드립니다.</p>
-        ) : !cmp.hasPrev ? (
-          <p className="text-[14px] leading-[1.6] text-muted">지난주 같은 기간({cmp.span === 0 ? '월요일' : `월~${WD_SHORT[(cmp.span + 1) % 7]}`})에는 기록이 없어 아직 비교할 수 없어요. 실제 기록이 있을 때만 변화를 보여 드립니다.</p>
-        ) : (
-          <>
-            <p className="text-[12px] font-semibold text-muted">{cmp.span === 0 ? '월요일' : `월~${WD_SHORT[(cmp.span + 1) % 7]}`} 기준 · 완료 세트 {cmp.setsPrev} → {cmp.setsNow}</p>
-            {cmp.items.length === 0 ? (
-              <p className="mt-2 text-[14px] text-muted">두 주에 공통으로 한 운동이 아직 없어요.</p>
-            ) : (
-              <ul className="mt-3 space-y-2.5">
-                {cmp.items.slice(0, 5).map((it) => {
-                  const ex = getEx(it.exId)!;
-                  return (
-                    <li key={it.exId} className="flex gap-2.5 text-[14px] leading-[1.5]">
-                      <TrendingUp size={16} className={`mt-0.5 shrink-0 ${it.diff > 0 ? 'text-primary' : 'text-muted-soft'}`} />
-                      <span className={it.diff > 0 ? 'text-ink' : 'text-body'}>{growthMessage(ex, it.diff, unitLabel(ex))}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </>
-        )}
-      </Card>
-
-      {/* 최근 4주 추이 · 성장 그래프 */}
-      <SectionTitle>최근 4주 추이</SectionTitle>
-      <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
-        {[{ id: '', name: '완료 세트' }, ...graphOptions.map((id) => ({ id, name: getEx(id)!.name }))].map((o) => (
-          <button key={o.id || 'all'} onClick={() => setSeries(o.id)}
-            className={`h-9 shrink-0 rounded-full px-3.5 text-[14px] font-medium ${series === o.id ? 'bg-ink text-canvas' : 'border border-hairline text-ink'}`}>
-            {o.name}
-          </button>
-        ))}
-      </div>
-      <Card className="p-4">
-        <div className="flex h-36 items-end justify-between gap-3">
-          {points.map((w, i) => {
-            const h = Math.round((w.value / maxV) * 100);
-            const { m, d } = parts(w.start);
-            return (
-              <div key={w.start} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
-                <span className="tabular text-[12px] font-semibold">{w.value}</span>
-                <div className="flex w-full max-w-[44px] flex-1 items-end">
-                  <div className={`w-full rounded-t-[6px] ${i === 3 ? 'bg-primary' : 'bg-border-strong'}`} style={{ height: `${Math.max(h, w.value ? 6 : 2)}%` }} />
-                </div>
-                <span className="tabular text-[11px] text-muted">{i === 3 ? '이번 주' : `${m}/${d}~`}</span>
-              </div>
-            );
-          })}
-        </div>
-        <p className="mt-3 text-[12px] text-muted">
-          {seriesEx ? `주별 ${seriesEx.name} 누적 ${unitLabel(seriesEx)}${seriesEx.perSide ? '(좌우 각)' : ''}` : '주별 완료 세트 수'} · 이번 주는 오늘까지
+      <SectionTitle>이번 주 달성</SectionTitle>
+      <Card className="px-4 py-3">
+        <p className="text-[14px] leading-[1.6] text-body">
+          오늘까지 계획한 <b className="tabular text-ink">{planned}일</b> 중 <b className="tabular text-ink">{doneW}일</b> 운동했습니다{planned ? ` (${Math.round((doneW / Math.max(1, planned)) * 100)}%)` : ''}.
+          {st.streak > 0 ? <> 지금 <b className="text-primary">{st.streak}일 연속</b>입니다.</> : ' 오늘 한 세트로 다시 시작하면 됩니다.'}
         </p>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-strong">
+          <div className="h-full rounded-full bg-primary" style={{ width: `${planned ? (doneW / planned) * 100 : 0}%` }} />
+        </div>
       </Card>
 
-      {/* 테스트 기록 */}
+      <SectionTitle>월간 운동 횟수</SectionTitle>
+      <Card className="p-4"><Bars data={months} unit="운동한 날 (일)" /></Card>
+
+      <SectionTitle right={<span className="tabular text-[13px] text-muted">누적 {totalMin.toLocaleString()}분</span>}>총 운동 시간</SectionTitle>
+      <Card className="p-4"><Bars data={minutes} unit="주별 운동 시간 (분)" note="운동 끝에 남긴 기록 기준" /></Card>
+
+      <SectionTitle>푸쉬업 최대 반복</SectionTitle>
+      <Card className="p-4">
+        <p className="mb-3 text-[13px] text-muted">지금 난도 · <b className="text-ink">{pushEx?.levels?.[pushLv]?.name}</b></p>
+        <Bars data={pushS.map((x) => ({ label: lab(x), value: x.best, tag: x.test ? 't' : undefined }))} unit="그날 가장 많이 한 세트 (회)" note="*는 테스트 데이(일반 푸쉬업 최대)" />
+      </Card>
+
+      <SectionTitle>풀업 진행</SectionTitle>
+      <Card className="p-4">
+        <ol className="mb-3 flex flex-wrap gap-1.5">
+          {pullEx?.levels?.map((l, i) => (
+            <li key={l.name} className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${i < pullLv ? 'bg-ink text-canvas' : i === pullLv ? 'bg-primary text-on-primary' : 'bg-strong text-muted'}`}>{i + 1}. {l.name}</li>
+          ))}
+          <li className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${fp.achieved ? 'bg-primary text-on-primary' : 'bg-strong text-muted'}`}>첫 풀업</li>
+        </ol>
+        <Bars data={pullS.map((x) => ({ label: lab(x), value: x.best }))} unit="발 보조 풀업 그날 최고 (회)" />
+        <div className="mt-3 border-t border-hairline-soft pt-3">
+          {fp.achieved ? (
+            <p className="flex items-center gap-2 text-[14px]"><Trophy size={16} className="text-primary" />첫 풀업 성공 · {fp.date ? longLabel(fp.date) : ''}
+              <button onClick={() => { if (confirm('첫 풀업 기록을 취소할까요?')) updateSettings({ firstPullup: { achieved: false } }); }} className="ml-auto text-[12px] text-muted underline">취소</button></p>
+          ) : (
+            <PrimaryButton className="w-full" onClick={() => { if (confirm('보조 없이 풀업 1회에 성공하셨나요?')) updateSettings({ firstPullup: { achieved: true, date: today } }); }}>첫 풀업 성공 기록하기</PrimaryButton>
+          )}
+        </div>
+      </Card>
+
+      <SectionTitle>스쿼트 수행 변화</SectionTitle>
+      <Card className="p-4"><Bars data={squatS.map((x) => ({ label: lab(x), value: x.best, tag: x.test ? 't' : undefined }))} unit="맨몸 스쿼트 그날 최고 (회)" /></Card>
+
+      <SectionTitle>유산소 시간</SectionTitle>
+      <Card className="p-4"><Bars data={cardio} unit="주별 빠르게 걷기 (분)" note="장기 목표 주 150분" /></Card>
+
+      <SectionTitle right={<span className="text-[13px] text-muted">{pains.length}건</span>}>통증 기록</SectionTitle>
+      {pains.length === 0 ? (
+        <p className="rounded-md bg-soft p-4 text-[14px] text-muted">기록된 통증이 없습니다.</p>
+      ) : (
+        <Card>
+          <ul className="divide-y divide-hairline-soft">
+            {pains.slice(0, 12).map((p) => (
+              <li key={p.d} className="px-4 py-3 text-[14px]">
+                <p><b className="tabular">{parts(p.d).m}/{parts(p.d).d}</b> <span className="text-error">{p.areas.length ? p.areas.map((a) => AREA_LABEL[a]).join('·') : '통증'}</span> <span className="text-muted">· {p.when}</span></p>
+                {p.memo && <p className="mt-0.5 text-[13px] text-muted">{p.memo}</p>}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      <p className="mt-2 px-1 text-[12px] leading-[1.5] text-muted">통증이 지속되거나 악화되면 전문가의 평가를 받아 주세요. 통증이 기록된 운동은 다음 단계 제안이 멈춥니다.</p>
+
+      {sugs.length > 0 && (
+        <>
+          <SectionTitle>다음 단계 제안</SectionTitle>
+          <Card>
+            <ul className="divide-y divide-hairline-soft">
+              {sugs.map((sg) => (
+                <li key={sg.exId} className="px-4 py-3">
+                  <p className="text-[14px] font-semibold">{sg.title}</p>
+                  <p className="mt-0.5 text-[12px] text-muted">{sg.detail}</p>
+                  <div className="mt-2 flex gap-2">
+                    <button type="button" onClick={() => acceptSuggestion(sg)} className="h-9 rounded-sm bg-primary px-3.5 text-[13px] font-semibold text-on-primary">적용하기</button>
+                    <button type="button" onClick={() => snoozeSuggestion(sg, today)} className="h-9 rounded-sm px-3 text-[13px] font-medium text-muted">나중에</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </>
+      )}
+
       <TestCompare />
 
-      {/* 첫 풀업 */}
-      <SectionTitle>첫 풀업</SectionTitle>
-      <Card className={`p-5 ${fp.achieved ? 'border-primary' : ''}`}>
-        <div className="flex items-center gap-4">
-          <div className={`grid h-14 w-14 shrink-0 place-items-center rounded-full ${fp.achieved ? 'bg-primary text-on-primary' : 'bg-strong text-muted'}`}>
-            <Trophy size={24} />
-          </div>
-          <div className="flex-1">
-            {fp.achieved ? (
-              <>
-                <p className="text-[16px] font-semibold">첫 풀업 성공!</p>
-                <p className="text-[14px] text-muted">{fp.date ? longLabel(fp.date) : ''}</p>
-              </>
-            ) : (
-              <>
-                <p className="text-[16px] font-semibold">도전 중</p>
-                <p className="text-[14px] text-muted">발 보조 풀업 최고 {st.perEx['foot-pullup']?.best ?? 0}회 · 천천히, 그러나 꾸준히</p>
-              </>
-            )}
-          </div>
-        </div>
-        {fp.achieved ? (
-          <button onClick={() => { if (confirm('첫 풀업 기록을 취소할까요?')) updateSettings({ firstPullup: { achieved: false } }); }}
-            className="mt-4 text-[13px] text-muted underline underline-offset-4">기록 취소</button>
-        ) : (
-          <PrimaryButton className="mt-4 w-full" onClick={() => { if (confirm('보조 없이 풀업 1회에 성공하셨나요?')) updateSettings({ firstPullup: { achieved: true, date: today } }); }}>
-            첫 풀업 성공 기록하기
-          </PrimaryButton>
-        )}
-      </Card>
-
-      {/* 개인 기록 */}
       <SectionTitle>운동별 누적 · 최고 기록</SectionTitle>
       {exStats.length === 0 ? (
         <p className="rounded-md bg-soft p-5 text-center text-[14px] text-muted">세트를 완료하면 이곳에 운동별 기록이 쌓입니다.</p>
       ) : (
-        <Card>
-          <ul className="divide-y divide-hairline-soft">
+        <Card className="px-4">
+          <div className="divide-y divide-hairline-soft">
             {exStats.map((e) => {
               const s = st.perEx[e.id];
-              return (
-                <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-3.5">
-                  <div className="min-w-0">
-                    <p className="text-[15px] font-semibold">{e.name}</p>
-                    <p className="tabular text-[13px] text-muted">누적 {s.total.toLocaleString()}{unitLabel(e)}{e.perSide ? '(좌우 각)' : ''} · {s.sets}세트</p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="flex items-center justify-end gap-1 text-[11px] font-semibold text-muted"><Award size={12} />최고</p>
-                    <p className="tabular text-[16px] font-semibold">{formatTarget(e, s.best)}</p>
-                  </div>
-                </li>
-              );
+              return <Row key={e.id} k={e.name} v={<>{formatTarget(e, s.best)} <span className="text-[12px] font-normal text-muted">최고 · 누적 {s.total.toLocaleString()}{unitLabel(e)}</span></>} />;
             })}
-          </ul>
+          </div>
         </Card>
       )}
 
-      {/* 성장 로드맵 */}
-      <SectionTitle right={<span className="text-[13px] text-muted">{ph.week}주차</span>}>성장 로드맵</SectionTitle>
+      <SectionTitle right={<span className="text-[13px] text-muted">{ph.before ? '시작 전' : `${Math.min(ph.week, PLAN_WEEKS)}주차`}</span>}>8주 발전 계획</SectionTitle>
       <div className="space-y-3">
-        {PHASES.map((p, i) => {
-          const cur = i === ph.idx, past = i < ph.idx;
+        {PLAN_PHASES.map((p, i) => {
+          const cur = i === ph.idx && !ph.before, past = i < ph.idx;
           return (
             <Card key={p.name} className={`p-4 ${cur ? 'border-ink shadow-float' : ''}`}>
               <div className="flex items-center justify-between">
@@ -307,7 +316,7 @@ function StatsView() {
           );
         })}
       </div>
-      <p className="mt-3 px-1 text-[12px] leading-[1.5] text-muted">단계별 목표는 방향을 잡기 위한 기준입니다. 변화의 속도는 개인차가 크며 결과를 보장하지 않습니다.</p>
+      <p className="mt-3 px-1 text-[12px] leading-[1.5] text-muted">변화의 속도는 개인차가 크며 결과를 보장하지 않습니다. 장비가 늘면(예: 운동용 밴드) 밴드 로우를 주 2~3회 추가하는 것이 권장됩니다.</p>
       <button type="button" onClick={() => setPreview(true)}
         className="mt-4 flex h-12 w-full items-center justify-center rounded-sm border border-ink text-[15px] font-medium">
         한 달 · 크리스마스 · 세 달 · 네 달 뒤 변화 보기
@@ -326,13 +335,20 @@ function DayDetail({ date, onClose }: { date: string | null; onClose: () => void
       {log && (
         <div>
           <p className="text-[14px] text-muted">{log.title} · 완료율 {completion(log)}% · {daySets(log).done}/{daySets(log).total} 세트</p>
+          {(log.check || log.after) && (
+            <div className="mt-3 rounded-sm bg-soft px-3.5 py-2.5 text-[13px] leading-[1.6] text-body">
+              {log.check && <p>운동 전 · 수면 {log.check.sleep}시간 · 피로도 {log.check.fatigue}/5{log.check.sore ? ' · 근육통' : ''} · {log.check.pain.length ? `${log.check.pain.map((a) => AREA_LABEL[a]).join('·')} 통증` : '통증 없음'}</p>}
+              {log.after && <p>운동 후 · {log.after.minutes}분 · 체감 난도 {log.after.rpe}/10 · {log.after.pain.length ? `${log.after.pain.map((a) => AREA_LABEL[a]).join('·')} 통증` : '통증 없음'}</p>}
+              {log.after?.memo && <p className="mt-1 text-ink">“{log.after.memo}”</p>}
+            </div>
+          )}
           <ul className="mt-4 space-y-3">
             {log.items.map((it, i) => {
               const ex = getEx(it.exerciseId);
               if (!ex) return null;
               return (
                 <li key={i} className="rounded-sm border border-hairline p-3.5">
-                  <p className="text-[15px] font-semibold">{it.label ?? ex.name}</p>
+                  <p className="text-[15px] font-semibold">{it.label ?? ex.name}{it.lv !== undefined && ex.levels?.[it.lv] ? <span className="text-[12px] font-normal text-muted"> · {ex.levels[it.lv].name}</span> : null}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {it.sets.map((s, j) => (
                       <span key={j} className={`tabular rounded-full px-2.5 py-1 text-[12px] font-medium ${s.done ? 'bg-primary-tint text-primary' : 'bg-strong text-muted-soft'}`}>
@@ -368,9 +384,9 @@ function TestCompare() {
     <>
       <SectionTitle>테스트 기록</SectionTitle>
       <Card>
-        <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 border-b border-hairline-soft px-4 py-2.5 text-[12px] font-semibold text-muted">
+        <div style={{ gridTemplateColumns: `1fr repeat(${days.length}, auto)` }} className="grid items-center gap-x-3 border-b border-hairline-soft px-4 py-2.5 text-[12px] font-semibold text-muted">
           <span>항목</span>
-          {days.map((d) => <span key={d} className="tabular w-14 text-right">{parts(d).m}/{parts(d).d}</span>)}
+          {days.map((d) => <span key={d} className="tabular w-12 text-right">{parts(d).m}/{parts(d).d}</span>)}
         </div>
         {rows.length === 0 ? (
           <p className="px-4 py-4 text-[14px] text-muted">테스트 데이에 기록한 숫자가 여기에 나란히 표시됩니다.</p>
@@ -379,12 +395,12 @@ function TestCompare() {
           const [a, b] = [r.vals[0], r.vals[r.vals.length - 1]];
           const up = days.length > 1 && a !== null && b !== null ? b - a : null;
           return (
-            <div key={r.label} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 border-b border-hairline-soft px-4 py-3 last:border-0">
+            <div key={r.label} style={{ gridTemplateColumns: `1fr repeat(${days.length}, auto)` }} className="grid items-center gap-x-3 border-b border-hairline-soft px-4 py-3 last:border-0">
               <span className="min-w-0 text-[14px] font-medium">{r.label.replace(' 최대', '')}
                 {up !== null && up !== 0 && <span className={`ml-1.5 text-[12px] font-semibold ${up > 0 ? 'text-primary' : 'text-muted'}`}>{up > 0 ? `+${up}` : up}</span>}
               </span>
               {r.vals.map((v, i) => (
-                <span key={i} className="tabular w-14 text-right text-[15px] font-semibold">{v === null ? <span className="text-muted-soft">–</span> : `${v}${ex ? unitLabel(ex) : ''}`}</span>
+                <span key={i} className="tabular w-12 text-right text-[15px] font-semibold">{v === null ? <span className="text-muted-soft">–</span> : `${v}${ex ? unitLabel(ex) : ''}`}</span>
               ))}
             </div>
           );
@@ -392,24 +408,5 @@ function TestCompare() {
       </Card>
       <p className="mt-2 px-1 text-[12px] text-muted">같은 방식으로 잰 숫자끼리 비교해야 정확합니다. 재테스트도 바른 자세 기준으로 재 주세요.</p>
     </>
-  );
-}
-
-function Stat({ label, value, unit, sub, icon }: { label: string; value: number; unit: string; sub: string; icon?: ReactNode }) {
-  return (
-    <Card className="p-4">
-      <p className="flex items-center gap-1 text-[12px] font-bold text-muted">{icon}{label}</p>
-      <p className="tabular mt-2 text-[28px] font-bold leading-none">{value.toLocaleString()}<span className="ml-0.5 text-[14px] font-medium text-muted">{unit}</span></p>
-      <p className="mt-1.5 text-[12px] text-muted-soft">{sub}</p>
-    </Card>
-  );
-}
-
-function MiniStat({ label, value, unit }: { label: string; value: number; unit: string }) {
-  return (
-    <div className="rounded-md bg-soft px-3 py-3">
-      <p className="text-[12px] font-semibold text-muted">{label}</p>
-      <p className="tabular mt-1 text-[22px] font-bold leading-none">{value}<span className="ml-0.5 text-[12px] font-medium text-muted">{unit}</span></p>
-    </div>
   );
 }

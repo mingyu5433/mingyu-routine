@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, ChevronRight, Plus, RotateCcw, Trash2 } from 'lucid
 import { useState } from 'react';
 import { useStore } from '../lib/store';
 import { weekday } from '../lib/date';
-import { CATEGORY_LABEL, EXERCISES, formatTarget, getEx, unitLabel } from '../data/exercises';
+import { CATEGORY_LABEL, EXERCISES, formatRange, formatTarget, getEx, unitLabel } from '../data/exercises';
 import { PRESET_LABEL, WEEKDAYS, WEEK_ORDER, type SchedulePreset } from '../data/schedule';
 import { Chip, PrimaryButton, SecondaryButton, Sheet, Stepper } from '../components/ui';
 import type { Category, DayPlan } from '../types';
@@ -36,8 +36,8 @@ export function ScheduleView() {
       <div className="mt-4 space-y-3">
         {WEEK_ORDER.map((wd) => {
           const plan = state.schedule[wd];
-          const rest = plan.items.length === 0;
-          const mains = plan.items.filter((p) => getEx(p.exerciseId)?.category !== 'warmup');
+          const rest = plan.items.every((p) => p.optional);
+          const mains = plan.items.filter((p) => (p.phase ?? (getEx(p.exerciseId)?.category === 'warmup' ? 'warmup' : getEx(p.exerciseId)?.category === 'mobility' ? 'cool' : 'main')) === 'main');
           return (
             <button key={wd} type="button" onClick={() => openEditor(wd)}
               className={`flex w-full items-center gap-4 rounded-md border p-4 text-left ${wd === todayWd ? 'border-ink' : 'border-hairline'}`}>
@@ -46,7 +46,7 @@ export function ScheduleView() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="text-[16px] font-semibold">{rest ? '휴식' : plan.title}</p>
+                  <p className="text-[16px] font-semibold">{plan.title}{plan.time ? <span className="text-[13px] font-normal text-muted"> · {plan.time}</span> : null}</p>
                   {wd === todayWd && <Chip tone="primary">오늘</Chip>}
                 </div>
                 <p className="mt-1 truncate text-[14px] text-muted">
@@ -87,7 +87,7 @@ export function ScheduleView() {
             </label>
 
             {state.settings.autoProgram && (
-              <p className="mt-4 rounded-sm bg-primary-tint px-3 py-2.5 text-[13px] leading-[1.5] text-primary">추천 프로그램이 켜져 있어 근력·풀업·걷기의 세트와 횟수는 기록에 맞춰 자동으로 정해집니다. 여기서는 어떤 운동을 할지와 순서를 정해 주세요.</p>
+              <p className="mt-4 rounded-sm bg-primary-tint px-3 py-2.5 text-[13px] leading-[1.5] text-primary">여기서 정한 세트·목표가 기본값입니다. 1~2주차(적응 단계)에는 근력운동이 최대 2세트로 시작하고, 목표를 안정적으로 채우면 '다음 단계 제안'이 나타납니다. 제안은 적용을 눌러야만 바뀝니다.</p>
             )}
             <div className="mt-5 space-y-2.5">
               {draft.items.length === 0 && <p className="rounded-sm bg-soft p-4 text-center text-[14px] text-muted">휴식일입니다. 운동을 추가하면 운동하는 날이 됩니다.</p>}
@@ -98,9 +98,9 @@ export function ScheduleView() {
                   <div key={`${p.exerciseId}-${i}`} className="rounded-md border border-hairline p-3.5">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <p className="text-[12px] font-bold text-muted">{CATEGORY_LABEL[ex.category]}</p>
+                        <p className="text-[12px] font-bold text-muted">{p.phase === 'warmup' ? '준비운동' : p.phase === 'cool' ? '스트레칭' : p.phase === 'main' ? '본운동' : CATEGORY_LABEL[ex.category]}{p.optional ? ' · 선택' : ''}</p>
                         <p className="text-[16px] font-semibold">{ex.name}</p>
-                        {ex.range && <p className="text-[12px] text-muted">권장 {ex.range}</p>}
+                        {p.range && <p className="text-[12px] text-muted">목표 범위 {formatRange(ex, p.range)}</p>}
                       </div>
                       <div className="flex gap-1">
                         <button onClick={() => move(i, -1)} aria-label="위로" className="grid h-8 w-8 place-items-center rounded-full bg-strong disabled:opacity-30" disabled={i === 0}><ArrowUp size={14} /></button>
@@ -115,11 +115,22 @@ export function ScheduleView() {
                           onChange={(v) => setDraft({ ...draft, items: draft.items.map((x, k) => (k === i ? { ...x, sets: v } : x)) })} />
                       </div>
                       <div className="text-right">
-                        <p className="mb-1 text-[11px] text-muted">세트당 목표{ex.perSide ? ' (좌우 각)' : ''}</p>
+                        <p className="mb-1 text-[11px] text-muted">세트당 목표{ex.each ? ` (${ex.each})` : ex.perSide ? ' (좌우 각)' : ''}</p>
                         <Stepper size="sm" value={p.target} min={1} suffix={unitLabel(ex)}
                           onChange={(v) => setDraft({ ...draft, items: draft.items.map((x, k) => (k === i ? { ...x, target: v } : x)) })} />
                       </div>
                     </div>
+                    {(p.phase ?? 'main') === 'main' && ex.unit !== 'min' && (
+                      <div className="mt-3">
+                        <p className="mb-1 text-[11px] text-muted">세트 사이 휴식</p>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {[60, 90, 120].map((r) => (
+                            <button key={r} type="button" onClick={() => setDraft({ ...draft, items: draft.items.map((x, k) => (k === i ? { ...x, rest: r } : x)) })}
+                              className={`tabular h-9 rounded-sm text-[13px] font-semibold ${(p.rest ?? ex.restSec ?? 90) === r ? 'bg-ink text-canvas' : 'border border-hairline'}`}>{r}초</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -151,7 +162,7 @@ export function ScheduleView() {
                 const added = draft?.items.some((p) => p.exerciseId === e.id);
                 return (
                   <button key={e.id} type="button" disabled={added}
-                    onClick={() => { if (draft) setDraft({ ...draft, items: [...draft.items, { exerciseId: e.id, sets: e.defaultSets, target: e.defaultTarget }] }); setPicker(false); }}
+                    onClick={() => { if (draft) setDraft({ ...draft, items: [...draft.items, { exerciseId: e.id, sets: e.defaultSets, target: e.defaultTarget, phase: e.category === 'warmup' ? 'warmup' : e.category === 'mobility' ? 'cool' : 'main', ...(e.restSec ? { rest: e.restSec } : {}) }] }); setPicker(false); }}
                     className="flex w-full items-center justify-between gap-3 rounded-sm border border-hairline p-3.5 text-left disabled:opacity-40">
                     <div>
                       <p className="text-[15px] font-semibold">{e.name}</p>

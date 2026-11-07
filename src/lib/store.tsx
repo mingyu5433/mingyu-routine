@@ -1,10 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { AppState, Condition, DayLog, DayPlan, ItemLog, Settings, SetLog } from '../types';
+import type { AfterNote, AppState, Condition, ConditionCheck, DayLog, DayPlan, ItemLog, Settings, SetLog } from '../types';
 import { defaultSchedule, KNEE_LOAD, type SchedulePreset } from '../data/schedule';
 import { getEx } from '../data/exercises';
 import { todayKey, weekday } from './date';
-import { ADD_AFTER, firstWeek, PROGRAM, stepAt } from '../data/program';
-import { levelFor, programWeek } from './progress';
+import { resolveItem, type Suggestion } from './plan';
 import { buildTestLog } from '../data/testday';
 import { idbGet, idbSet, requestPersist } from './storage';
 
@@ -24,9 +23,13 @@ export function defaultState(): AppState {
       startDate: todayKey(),
       goalDate: '2026-12-20',
       autoProgram: true,
-      testDays: { '2026-11-02': 'upper', '2026-12-20': 'full' },
-      migV: 3,
-      kneeRest: true,
+      testDays: { '2026-11-02': 'upper', '2026-12-20': 'full', '2027-01-02': 'full' },
+      migV: 4,
+      kneeRest: false,
+      planStart: '2026-11-09',
+      fullSets: false,
+      exState: {},
+      snooze: {},
       firstPullup: { achieved: false },
     },
     schedule: defaultSchedule(),
@@ -77,9 +80,8 @@ function fixToday(st: AppState): AppState {
       const items = tl.items.map((i) => (i.label && OLD[i.label] && !i.sets[0]?.done ? { ...i, ...OLD[i.label] } : i));
       return { ...st, logs: { ...st.logs, [t]: { ...tl, items } } };
     }
-    const stale = isTest ? !tl?.items.some((i) => i.test)
-      : !tl?.items.some((i) => i.level) || tl?.items.some((i) => i.exerciseId === 'incline-pushup') || !tl?.items.some((i) => getEx(i.exerciseId)?.category === 'mobility');
-    if (st.settings.autoProgram && tl && stale && !tl.items.some((i) => i.sets.some((x) => x.done))) {
+    const stale = isTest ? !tl?.items.some((i) => i.test) : !!tl && !tl.items.some((i) => i.phase);
+    if (tl && stale && !tl.items.some((i) => i.sets.some((x) => x.done))) {
       const logs = { ...st.logs };
       delete logs[t];
       return { ...st, logs };
@@ -144,6 +146,16 @@ export function normalize(data: unknown): AppState {
     if (logs[t] && !logs[t].items.some((i) => i.sets.some((x) => x.done))) delete logs[t];
     s.logs = logs;
   }
+  // v4 (11/8): 명세서 주 6일 전신 프로그램 · 8주 진행 · 무릎 회복 완료
+  if ((s.settings?.migV ?? 0) < 4) {
+    schedule = defaultSchedule('spec');
+    Object.assign(settings, { migV: 4, kneeRest: false, planStart: '2026-11-09', fullSets: false, exState: {}, snooze: {} });
+    settings.testDays = { ...settings.testDays, '2027-01-02': 'full' };
+    const logs = { ...(s.logs ?? {}) };
+    const t = todayKey();
+    if (logs[t] && !logs[t].items.some((i) => i.sets.some((x) => x.done))) delete logs[t];
+    s.logs = logs;
+  }
   return {
     version: 1,
     settings,
@@ -163,31 +175,21 @@ export function buildDayLog(date: string, plan: DayPlan, state?: AppState): DayL
     const tl = buildTestLog(date, testKind, plan);
     return state?.settings.kneeRest ? { ...tl, items: tl.items.filter((i) => !KNEE_LOAD.has(i.exerciseId)) } : tl;
   }
-  const auto = !!state?.settings.autoProgram;
+  const auto = state ? state.settings.autoProgram !== false : false;
   const knee = !!state?.settings.kneeRest;
   const items: ItemLog[] = [];
   for (const p of plan.items) {
     if (!getEx(p.exerciseId)) continue;
     if (knee && KNEE_LOAD.has(p.exerciseId)) continue;
-    const opt = p.optional ? { optional: true } : {};
-    if (auto && PROGRAM[p.exerciseId]) {
-      const { level, reason } = levelFor(state!, p.exerciseId, date);
-      const step = stepAt(p.exerciseId, level);
-      if (step) { items.push({ exerciseId: p.exerciseId, sets: makeSets(step.sets, step.target), level, hold: reason, ...opt }); continue; }
-    }
-    items.push({ exerciseId: p.exerciseId, sets: makeSets(p.sets, p.target), ...opt });
+    const r = auto && state ? resolveItem(p, state, date) : { sets: p.sets, target: p.target, lv: undefined };
+    items.push({
+      exerciseId: p.exerciseId, sets: makeSets(r.sets, r.target),
+      phase: p.phase, range: p.range, rest: p.rest,
+      ...(r.lv !== undefined ? { lv: r.lv } : {}),
+      ...(p.optional ? { optional: true } : {}),
+    });
   }
-  if (auto) {
-    const week = programWeek(state!.settings.startDate, date);
-    for (const [exId, anchor] of Object.entries(ADD_AFTER)) {
-      const at = items.findIndex((i) => i.exerciseId === anchor);
-      if (at < 0 || items.some((i) => i.exerciseId === exId) || week < firstWeek(exId)) continue;
-      const { level, reason } = levelFor(state!, exId, date);
-      const step = stepAt(exId, level);
-      if (step) items.splice(at + 1, 0, { exerciseId: exId, sets: makeSets(step.sets, step.target), level, hold: reason });
-    }
-  }
-  return { date, title: plan.title, items };
+  return { date, title: plan.title, items, ...(plan.time ? { time: plan.time } : {}) };
 }
 
 const hasDone = (log?: DayLog) => !!log?.items.some((i) => i.sets.some((s) => s.done));
@@ -289,6 +291,47 @@ function useStoreValue(initial: AppState) {
     setCondition(date: string, c: Condition | undefined) {
       mutateDay(date, (log) => ({ ...log, condition: c }));
     },
+    setCheck(date: string, check: ConditionCheck) {
+      mutateDay(date, (log) => ({ ...log, check, startedAt: log.startedAt ?? Date.now() }));
+    },
+    markStarted(date: string) {
+      mutateDay(date, (log) => ({ ...log, startedAt: log.startedAt ?? Date.now() }));
+    },
+    setAfter(date: string, after: AfterNote) {
+      mutateDay(date, (log) => ({ ...log, after }));
+    },
+    setBedtime(date: string, idx: number, v: boolean) {
+      mutateDay(date, (log) => { const b = [...(log.bedtime ?? [])]; b[idx] = v; return { ...log, bedtime: b }; });
+    },
+    /** 제안 수락 · 난도 직접 변경 (오늘 아직 시작 전이면 오늘 목표도 바로 반영) */
+    setExState(exId: string, patch: { bump?: number; lv?: number }) {
+      setState((s) => {
+        const exState = { ...(s.settings.exState ?? {}), [exId]: { ...(s.settings.exState?.[exId] ?? {}), ...patch } };
+        const logs = { ...s.logs };
+        const t = todayKey();
+        const tl = logs[t];
+        if (tl) {
+          const idx = tl.items.findIndex((i) => i.exerciseId === exId && !i.sets.some((x) => x.done));
+          if (idx >= 0) {
+            const plan = s.schedule[weekday(t)];
+            const p = plan?.items.find((q) => q.exerciseId === exId && (q.phase ?? 'main') === (tl.items[idx].phase ?? 'main'));
+            if (p) {
+              const r = resolveItem(p, { ...s, settings: { ...s.settings, exState } }, t);
+              const items = [...tl.items];
+              items[idx] = { ...items[idx], sets: makeSets(r.sets, r.target), lv: r.lv };
+              logs[t] = { ...tl, items };
+            }
+          }
+        }
+        return { ...s, settings: { ...s.settings, exState }, logs };
+      });
+    },
+    acceptSuggestion(sg: Suggestion) {
+      actions.setExState(sg.exId, sg.patch);
+    },
+    snoozeSuggestion(sg: Suggestion, date: string) {
+      setState((s) => ({ ...s, settings: { ...s.settings, snooze: { ...(s.settings.snooze ?? {}), [sg.exId]: date } } }));
+    },
     setDayPlan(wd: number, plan: DayPlan) {
       setState((s) => {
         const schedule = { ...s.schedule, [wd]: plan };
@@ -317,7 +360,7 @@ function useStoreValue(initial: AppState) {
         return { ...s, schedule, logs };
       });
     },
-    resetSchedule(preset: SchedulePreset = 'upper') {
+    resetSchedule(preset: SchedulePreset = 'spec') {
       setState((s) => {
         const logs = { ...s.logs };
         const t = todayKey();
@@ -330,7 +373,11 @@ function useStoreValue(initial: AppState) {
         const logs = { ...s.logs };
         const t = todayKey();
         // 프로그램 설정이 바뀌면 아직 시작하지 않은 오늘 목표를 다시 계산
-        if (('autoProgram' in patch || 'startDate' in patch || 'kneeRest' in patch) && !hasDone(logs[t])) delete logs[t];
+        if (['autoProgram', 'startDate', 'kneeRest', 'planStart', 'fullSets'].some((k) => k in patch) && !hasDone(logs[t])) {
+          const tl = logs[t];
+          if (tl) delete logs[t];
+          if (tl?.check) logs[t] = { ...buildDayLog(t, s.schedule[weekday(t)], { ...s, settings: { ...s.settings, ...patch }, logs }), check: tl.check, startedAt: tl.startedAt };
+        }
         return { ...s, settings: { ...s.settings, ...patch }, logs };
       });
     },
@@ -389,7 +436,8 @@ export function useStore() {
   return v;
 }
 
-export const restFor = (exerciseId: string, settings: Settings) => {
+export const restFor = (exerciseId: string, settings: Settings, item?: Pick<ItemLog, 'rest'>) => {
+  if (item?.rest) return item.rest;
   const ex = getEx(exerciseId);
   if (!ex) return settings.restDefault;
   if (ex.restSec > 0) return ex.restSec;

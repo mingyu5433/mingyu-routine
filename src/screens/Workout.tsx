@@ -9,9 +9,6 @@ import { ExerciseInfo } from '../components/ExerciseInfo';
 import { Card, Chip, PrimaryButton, SectionTitle, Segmented, Sheet, Stepper } from '../components/ui';
 import { ScheduleView } from './Schedule';
 import type { Category } from '../types';
-import { PROGRAM } from '../data/program';
-import { levelFor } from '../lib/progress';
-import { stepAt } from '../data/program';
 
 const CAT_ORDER: Category[] = ['strength', 'pull', 'cardio', 'warmup', 'mobility'];
 
@@ -72,8 +69,9 @@ function LibraryView() {
 
 function ExerciseDetail({ id, onClose }: { id: string | null; onClose: () => void }) {
   const { state, today, setDayPlan, setExerciseGoalAll } = useStore();
-  const managed = !!id && state.settings.autoProgram && !!PROGRAM[id];
-  const nowStep = managed && id ? stepAt(id, levelFor(state, id, today).level) : null;
+  const managed = false;
+  const nowStep = null as null | { sets: number; target: number };
+  void today;
   const ex = id ? getEx(id) : undefined;
   const current = id ? WEEK_ORDER.flatMap((wd) => state.schedule[wd].items.filter((p) => p.exerciseId === id)) : [];
   const [goal, setGoal] = useState<{ id: string; sets: number; target: number } | null>(null);

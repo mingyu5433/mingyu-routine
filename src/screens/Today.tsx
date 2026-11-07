@@ -1,110 +1,83 @@
-import { ArrowRight, ChevronRight, Clock3, Coffee, Flame, Flag, PartyPopper, Play, Sparkles, TrendingUp } from 'lucide-react';
+import { ArrowRight, ChevronRight, Clock3, Coffee, Flag, Flame, HeartPulse, Moon, PartyPopper, Play, Sparkles, Target, TrendingUp } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useStore, restFor } from '../lib/store';
-import { longLabel, addDays, weekday, diffDays, parts } from '../lib/date';
-import { completion, computeStats, daySets, estimateMinutes, growthMessage, weekCompare } from '../lib/stats';
-import { programWeek } from '../lib/progress';
-import { formatTarget, getEx, unitLabel } from '../data/exercises';
+import { useStore } from '../lib/store';
+import { addDays, diffDays, longLabel, parts, weekday } from '../lib/date';
+import { completion, computeStats, daySets, estimateMinutes, growthMessage, phaseOf, weekCompare, weekStrip } from '../lib/stats';
+import { AREA_LABEL, fullSetsDue, phaseOfItem, PLAN_WEEKS, suggestions, warningFor } from '../lib/plan';
+import { getEx, unitLabel } from '../data/exercises';
 import { QUOTES } from '../data/quotes';
-import { WEEK_FOCUS, PROGRAM_WEEKS, variantName } from '../data/program';
 import { WEEKDAYS } from '../data/schedule';
 import { ExerciseCard } from '../components/ExerciseCard';
 import { ChangePreviewSheet, MotivationSheet } from '../components/Boost';
 import { BackupReminder, MonthlyRecap } from '../components/Backup';
-import { Card, Chip, ProgressBar, Segmented, SectionTitle } from '../components/ui';
-import { haptic, unlockAudio } from '../lib/feedback';
-import { TEST_REST_SEC } from '../data/testday';
-import type { Condition } from '../types';
+import { AfterSheet, BedtimeSheet } from '../components/Session';
+import { Card, Chip, SectionTitle } from '../components/ui';
+import { useSetActions } from '../lib/useSetActions';
+import type { ItemLog } from '../types';
 
-const CONDITION_MSG: Record<Condition, string | null> = {
-  good: null,
-  tired: '피곤한 날에는 세트를 줄이거나 준비운동과 걷기만 해도 충분합니다. 각 운동의 "직접 조정"에서 세트를 줄여 주세요.',
-  pain: '통증이 있는 부위의 운동은 쉬어도 괜찮습니다. 오늘 통증을 기록하면 다음 운동일에 단계를 올리지 않습니다. 통증이 반복되거나 일상에서도 아프다면 물리치료사나 정형외과 평가를 권장합니다.',
-};
+const DAY_LETTERS = ['월', '화', '수', '목', '금', '토', '일'];
 
-export function TodayScreen() {
+function Ring({ pct }: { pct: number }) {
+  const R = 26, C = 2 * Math.PI * R;
+  return (
+    <svg viewBox="0 0 64 64" className="h-16 w-16 shrink-0 -rotate-90" aria-hidden="true">
+      <circle cx="32" cy="32" r={R} fill="none" stroke="var(--c-surface-strong)" strokeWidth="7" />
+      <circle cx="32" cy="32" r={R} fill="none" stroke="var(--c-primary)" strokeWidth="7" strokeLinecap="round"
+        strokeDasharray={C} strokeDashoffset={C * (1 - pct / 100)} style={{ transition: 'stroke-dashoffset .5s' }} />
+    </svg>
+  );
+}
+
+export function TodayScreen({ onStart }: { onStart: () => void }) {
   const store = useStore();
-  const { state, today, dayLog } = store;
-  const log = dayLog(today);
+  const { state, today } = store;
+  const { log, toggle, record } = useSetActions(today);
   const pct = completion(log);
   const { total, done } = daySets(log);
   const [lo, hi] = estimateMinutes(log, state.settings);
   const quote = QUOTES[Math.abs(diffDays(today, '2026-01-01')) % QUOTES.length];
-  const streak = useMemo(() => computeStats(state, today).streak, [state, today]);
+  const st = useMemo(() => computeStats(state, today), [state, today]);
+  const strip = useMemo(() => weekStrip(state, today), [state, today]);
   const growth = useMemo(() => weekCompare(state, today).items.find((x) => x.diff > 0), [state, today]);
+  const sugs = useMemo(() => suggestions(state, today), [state, today]);
+  const ph = phaseOf(state, today);
   const [boost, setBoost] = useState(false);
   const [preview, setPreview] = useState(false);
+  const [bed, setBed] = useState(false);
+  const [after, setAfter] = useState(false);
+  const [showPhase, setShowPhase] = useState(false);
 
-  // 목표일 카운트다운
   const goal = state.settings.goalDate;
-  const week = programWeek(state.settings.startDate, today);
-  const totalDays = Math.max(1, diffDays(goal, state.settings.startDate) + 1);
   const goalLeft = diffDays(goal, today);
-  const goalPct = Math.min(100, Math.max(0, Math.round(((diffDays(today, state.settings.startDate) + 1) / totalDays) * 100)));
-  const goalWeeks = Math.ceil(totalDays / 7);
   const g = parts(goal);
 
-  const warmups = log.items.map((it, i) => ({ it, i })).filter(({ it }) => getEx(it.exerciseId)?.category === 'warmup');
-  const mains = log.items.map((it, i) => ({ it, i })).filter(({ it }) => !['warmup', 'mobility'].includes(getEx(it.exerciseId)?.category ?? ''));
-  const cools = log.items.map((it, i) => ({ it, i })).filter(({ it }) => getEx(it.exerciseId)?.category === 'mobility');
+  const groups = (['warmup', 'main', 'cool'] as const).map((p) => ({ p, list: log.items.map((it, i) => ({ it, i })).filter(({ it }) => phaseOfItem(it) === p) }));
   const isTestDay = log.items.some((it) => it.test);
-  const firstOpen = log.items.findIndex((it) => it.sets.some((s) => !s.done));
-  const isRest = log.items.length === 0;
-  const [openSet, setOpenSet] = useState<Set<number>>(() => new Set([firstOpen]));
-  useEffect(() => { setOpenSet(new Set([firstOpen])); }, [today]); // eslint-disable-line react-hooks/exhaustive-deps
-  const setOpen = (i: number, v: boolean) => setOpenSet((prev) => {
-    const n = new Set(prev);
-    if (v) n.add(i); else n.delete(i);
-    return n;
-  });
-  const goTo = (i: number) => {
-    if (i < 0) return;
-    setOpen(i, true);
-    requestAnimationFrame(() => document.getElementById(`ex-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  };
+  const required = log.items.filter((it) => !it.optional);
+  const isRest = required.length === 0 && !isTestDay;
+  const firstOpen = log.items.findIndex((it) => it.sets.some((s) => !s.done) && !it.optional);
+  const [openSet, setOpenSet] = useState<Set<number>>(() => new Set());
+  useEffect(() => { setOpenSet(new Set()); }, [today]);
+  const setOpen = (i: number, v: boolean) => setOpenSet((prev) => { const n = new Set(prev); if (v) n.add(i); else n.delete(i); return n; });
   const nextEx = firstOpen >= 0 ? getEx(log.items[firstOpen].exerciseId) : undefined;
+  const plan = state.schedule[weekday(today)];
+  const tired = log.check && (log.check.fatigue >= 4 || log.check.sleep < 6);
+  const weekPlanned = strip.filter((x) => !x.mark.startsWith('rest')).length;
+  const weekDone = strip.filter((x) => x.mark === 'full' || x.mark === 'part').length;
 
-  /** 세트가 새로 완료되었을 때: 진동, 휴식 타이머, 다음 운동 펼치기 */
-  const afterDone = (i: number, j: number) => {
-    if (state.settings.haptic) haptic(15);
-    const remaining = total - done - 1;
-    if (remaining <= 0) {
-      store.stopTimer();
-      if (state.settings.haptic) haptic([40, 60, 40, 60, 120]);
-      return;
-    }
-    const ex = getEx(log.items[i].exerciseId)!;
-    const nextInSame = log.items[i].sets.some((s, k) => k !== j && !s.done);
-    if (!nextInSame) {
-      const next = log.items.findIndex((it, k) => k !== i && it.sets.some((s) => !s.done));
-      if (next >= 0) setOpenSet((prev) => { const n = new Set(prev); n.delete(i); n.add(next); return n; });
-    }
-    const isTestItem = !!log.items[i].test;
-    store.startTimer(isTestItem ? TEST_REST_SEC : restFor(ex.id, state.settings), isTestItem ? '다음 테스트까지 충분히 쉬기' : nextInSame ? `${ex.name} 다음 세트까지` : '다음 운동까지');
+  const card = ({ it, i }: { it: ItemLog; i: number }) => {
+    const ex = getEx(it.exerciseId);
+    const sg = phaseOfItem(it) === 'main' ? sugs.find((s) => s.exId === it.exerciseId) : undefined;
+    return (
+      <ExerciseCard key={`${today}-${i}-${it.exerciseId}`} id={`ex-${i}`} item={it}
+        open={openSet.has(i)} onOpenChange={(v) => setOpen(i, v)}
+        onToggle={(j) => toggle(i, j)} onRecord={(j, a) => record(i, j, a)}
+        onTarget={(j, t) => store.updateSet(today, i, j, it.sets[j].done ? { target: t } : { target: t, actual: t })}
+        onAdd={() => store.addSet(today, i)} onRemove={(j) => store.removeSet(today, i, j)}
+        warning={warningFor(ex, log)} suggestion={sg}
+        onAccept={() => sg && store.acceptSuggestion(sg)} onSnooze={() => sg && store.snoozeSuggestion(sg, today)} />
+    );
   };
-
-  const toggle = (i: number, j: number) => {
-    unlockAudio();
-    const wasDone = log.items[i].sets[j].done;
-    store.toggleSet(today, i, j);
-    if (!wasDone) afterDone(i, j);
-  };
-  const record = (i: number, j: number, actual: number) => {
-    unlockAudio();
-    const wasDone = log.items[i].sets[j].done;
-    store.recordSet(today, i, j, actual);
-    if (!wasDone && actual > 0) afterDone(i, j);
-  };
-
-  const card = ({ it, i }: { it: typeof log.items[number]; i: number }) => (
-    <ExerciseCard key={`${today}-${i}-${it.exerciseId}`} id={`ex-${i}`} item={it}
-      open={openSet.has(i)} onOpenChange={(v) => setOpen(i, v)}
-      onToggle={(j) => toggle(i, j)}
-      onRecord={(j, a) => record(i, j, a)}
-      onTarget={(j, t) => store.updateSet(today, i, j, it.sets[j].done ? { target: t } : { target: t, actual: t })}
-      onAdd={() => store.addSet(today, i)}
-      onRemove={(j) => store.removeSet(today, i, j)} />
-  );
 
   const tomorrow = addDays(today, 1);
   const tomorrowPlan = state.schedule[weekday(tomorrow)];
@@ -114,13 +87,10 @@ export function TodayScreen() {
       <header className="pt-2">
         <div className="flex items-center justify-between">
           <span className="text-[12px] font-bold tracking-[0.3px] text-primary">MINGYU ROUTINE</span>
-          <div className="flex items-center gap-1.5">
-            {streak > 0 && <Chip><Flame size={12} />{streak}일 연속</Chip>}
-            <button type="button" onClick={() => setBoost(true)}
-              className="inline-flex h-8 items-center gap-1 rounded-full bg-primary px-3 text-[12px] font-semibold text-on-primary active:bg-primary-active">
-              <Sparkles size={13} /> 동기부여
-            </button>
-          </div>
+          <button type="button" onClick={() => setBoost(true)}
+            className="inline-flex h-8 items-center gap-1 rounded-full bg-primary px-3 text-[12px] font-semibold text-on-primary active:bg-primary-active">
+            <Sparkles size={13} /> 동기부여
+          </button>
         </div>
         <h1 className="mt-3 text-[28px] font-bold leading-[1.3]">{longLabel(today)}</h1>
         <p className="mt-1 text-[14px] text-muted">{quote}</p>
@@ -134,142 +104,180 @@ export function TodayScreen() {
         })()}
       </header>
 
-      {/* 목표일 카운트다운 */}
-      <button type="button" onClick={() => setPreview(true)} className="mt-5 block w-full rounded-md bg-ink p-4 text-left text-canvas">
+      {/* 오늘의 운동 */}
+      <Card className="mt-5 p-5 shadow-float">
+        <div className="flex items-center justify-between gap-2">
+          <Chip tone={isRest ? 'soft' : 'primary'}>{WEEKDAYS[weekday(today)]}요일 · {isTestDay ? '테스트' : isRest ? '휴식' : '운동'}</Chip>
+          <span className="flex items-center gap-1 text-[13px] text-muted"><Clock3 size={13} />예상 {plan?.time ?? log.time ?? `${lo}~${hi}분`}</span>
+        </div>
+        <h2 className="mt-3 text-[22px] font-semibold leading-[1.3] tracking-[-0.44px]">{log.title}</h2>
+        {plan?.goal && !isTestDay && <p className="mt-1 text-[14px] leading-[1.5] text-body">{plan.goal}</p>}
+
+        {!isRest && (
+          <div className="mt-4 flex items-center gap-4 rounded-sm bg-soft p-3.5">
+            <div className="relative">
+              <Ring pct={pct} />
+              <span className="tabular absolute inset-0 grid place-items-center text-[14px] font-bold">{pct}%</span>
+            </div>
+            <div className="min-w-0 text-[14px] leading-[1.55] text-body">
+              <p><b className="tabular text-ink">{total}세트 중 {done}세트</b>를 마쳤습니다.</p>
+              <p className="text-muted">준비운동 {groups[0].list.length} · 본운동 {groups[1].list.length} · 스트레칭 {groups[2].list.length}</p>
+            </div>
+          </div>
+        )}
+
+        {log.check ? (
+          <p className="mt-3 flex items-start gap-2 text-[13px] leading-[1.5] text-muted">
+            <HeartPulse size={14} className="mt-0.5 shrink-0" />
+            수면 {log.check.sleep}시간 · 피로도 {log.check.fatigue}{log.check.sore ? ' · 근육통' : ''} · {log.check.pain.length ? `${log.check.pain.map((a) => AREA_LABEL[a]).join('·')} 통증` : '통증 없음'}
+          </p>
+        ) : null}
+        {tired && <p className="mt-2 rounded-sm bg-soft p-3 text-[13px] leading-[1.55] text-body">피곤한 날입니다. 근력운동은 1세트씩 줄이거나(각 운동의 '직접 조정'), 준비운동과 걷기만 해도 충분합니다.</p>}
+
+        {isRest ? (
+          <p className="mt-3 text-[14px] leading-[1.6] text-body">근력운동은 쉬는 날입니다. 피로가 있다면 완전히 쉬고, 몸이 편하면 15~20분 산책하거나 아래 선택 스트레칭을 해 보세요. 연속 기록은 끊기지 않습니다.</p>
+        ) : nextEx ? (
+          <button type="button" onClick={onStart}
+            className="mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-sm bg-primary text-[17px] font-semibold text-on-primary active:bg-primary-active">
+            {done === 0 ? <><Play size={17} fill="currentColor" />운동 시작</> : <>이어하기 · {nextEx.name}<ArrowRight size={17} /></>}
+          </button>
+        ) : (
+          <button type="button" onClick={() => setAfter(true)}
+            className="mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-sm bg-ink text-[16px] font-semibold text-canvas">
+            <Flag size={16} />{log.after ? `기록 완료 · 체감 난도 ${log.after.rpe} · ${log.after.minutes}분 (수정)` : '운동 끝 · 기록 남기기'}
+          </button>
+        )}
+      </Card>
+
+      {pct === 100 && !isRest && (
+        <div className="animate-rise mt-4 flex items-start gap-3 rounded-md bg-ink p-5 text-canvas">
+          <PartyPopper size={22} className="mt-0.5 shrink-0 text-primary" />
+          <div>
+            <p className="text-[16px] font-semibold">오늘의 운동 완료!</p>
+            <p className="mt-1 text-[14px] opacity-80">{total}세트를 모두 마쳤습니다. {goalLeft > 0 ? `${g.m}월 ${g.d}일까지 ${goalLeft}일, 오늘도 한 칸 가까워졌습니다.` : '이제 충분히 회복해 주세요.'}</p>
+          </div>
+        </div>
+      )}
+
+      {/* 이번 주 */}
+      <section className="mt-5 rounded-md border border-hairline p-4">
         <div className="flex items-center justify-between">
-          <p className="flex items-center gap-1.5 text-[13px] font-semibold opacity-80"><Flag size={13} />{g.m}월 {g.d}일까지</p>
-          <p className="tabular text-[13px] font-semibold opacity-80">{Math.min(week, PROGRAM_WEEKS)}주차 / {goalWeeks}주</p>
+          <p className="text-[15px] font-semibold">이번 주 <span className="tabular font-normal text-muted">계획 {weekPlanned}일 중 {weekDone}일 운동</span></p>
+          {st.streak > 0 && <span className="flex items-center gap-1 text-[13px] font-semibold text-primary"><Flame size={14} />{st.streak}일 연속</span>}
         </div>
-        <p className="tabular mt-1 text-[28px] font-bold leading-tight">
-          {goalLeft > 0 ? <>D-{goalLeft}</> : goalLeft === 0 ? '오늘이 목표일' : '목표일 완주'}
-        </p>
-        <p className="mt-1 text-[14px] opacity-85">{WEEK_FOCUS[Math.min(week, PROGRAM_WEEKS) - 1]}</p>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/20">
-          <div className="h-full rounded-full bg-primary" style={{ width: `${goalPct}%` }} />
+        <div className="mt-3 grid grid-cols-7 gap-1 text-center">
+          {strip.map(({ d, mark }, k) => {
+            const isToday = d === today;
+            const cls = mark === 'full' ? 'bg-primary text-on-primary' : mark === 'part' ? 'bg-primary-tint text-primary' : mark === 'rest' || mark === 'rest-done' ? 'bg-soft text-muted-soft' : mark === 'missed' ? 'border border-hairline text-muted-soft' : 'border border-hairline text-ink';
+            return (
+              <div key={d} className="flex flex-col items-center gap-1">
+                <span className={`text-[11px] ${isToday ? 'font-bold text-ink' : 'text-muted'}`}>{DAY_LETTERS[k]}</span>
+                <span className={`tabular grid h-9 w-9 place-items-center rounded-full text-[13px] font-semibold ${cls} ${isToday ? 'ring-2 ring-ink ring-offset-2 ring-offset-canvas' : ''}`}>
+                  {mark === 'rest' || mark === 'rest-done' ? '휴' : parts(d).d}
+                </span>
+              </div>
+            );
+          })}
         </div>
-        <p className="mt-3 flex items-center justify-end gap-0.5 text-[13px] font-medium opacity-80">한 달 · 크리스마스 · 세 달 뒤 변화 보기 <ChevronRight size={14} /></p>
+      </section>
+
+      {/* 8주 프로그램 · 목표일 */}
+      <button type="button" onClick={() => setShowPhase((v) => !v)} className="mt-3 block w-full rounded-md bg-ink p-4 text-left text-canvas">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[15px] font-semibold">
+            {ph.before ? '8주 프로그램 시작 전' : `8주 프로그램 ${Math.min(ph.week, PLAN_WEEKS)}주차`} · {ph.phase.name}
+          </p>
+          <span className="tabular text-[13px] opacity-80">{goalLeft > 0 ? `${g.m}/${g.d}까지 D-${goalLeft}` : ''}</span>
+        </div>
+        <div className="mt-3 flex gap-1">
+          {Array.from({ length: PLAN_WEEKS }, (_, k) => (
+            <span key={k} className={`h-1.5 flex-1 rounded-full ${k < ph.week ? 'bg-primary' : 'bg-white/20'}`} />
+          ))}
+        </div>
+        {showPhase ? (
+          <ul className="mt-3 space-y-1 text-[13px] leading-[1.5] opacity-90">
+            {ph.phase.goals.map((x) => <li key={x}>· {x}</li>)}
+          </ul>
+        ) : <p className="mt-2 text-[13px] opacity-70">눌러서 이번 단계 목표 보기</p>}
+      </button>
+      <button type="button" onClick={() => setPreview(true)} className="mt-2 flex w-full items-center justify-end gap-0.5 text-[13px] font-medium text-muted">
+        한 달 · 크리스마스 · 세 달 뒤 변화 보기 <ChevronRight size={14} />
       </button>
 
-      {state.settings.kneeRest && (
-        <p className="mt-4 rounded-sm bg-soft px-3.5 py-3 text-[13px] leading-[1.55] text-body">
-          <b className="text-ink">무릎 회복 모드</b> · 무릎에 부담 가는 운동은 빼고 상체 A·B를 진행합니다. 계단이나 걷기에서도 통증이 없어지면 설정에서 끄고 '전신' 일정으로 바꿔 주세요.
-        </p>
+      {fullSetsDue(state, today) && (
+        <div className="mt-3 rounded-md border border-primary p-4">
+          <p className="flex items-center gap-1.5 text-[15px] font-semibold"><Target size={15} className="text-primary" />적응 단계가 끝났습니다</p>
+          <p className="mt-1 text-[13px] leading-[1.55] text-body">최근 일주일 통증 기록이 없습니다. 회복 상태가 좋다면 근력운동을 목표 세트(3세트)로 늘릴까요?</p>
+          <div className="mt-3 flex gap-2">
+            <button type="button" onClick={() => store.updateSettings({ fullSets: true })} className="h-10 rounded-sm bg-primary px-4 text-[14px] font-semibold text-on-primary">목표 세트로 늘리기</button>
+            <span className="self-center text-[12px] text-muted">아직이면 그대로 두셔도 됩니다</span>
+          </div>
+        </div>
       )}
+
+      {sugs.length > 0 && (
+        <section className="mt-3 rounded-md border border-hairline p-4">
+          <p className="flex items-center gap-1.5 text-[15px] font-semibold"><Sparkles size={15} className="text-primary" />다음 단계 제안 {sugs.length}개</p>
+          <ul className="mt-2 divide-y divide-hairline-soft">
+            {sugs.map((sg) => (
+              <li key={sg.exId} className="py-2.5">
+                <p className="text-[14px] font-semibold">{sg.title}</p>
+                <p className="mt-0.5 text-[12px] leading-[1.5] text-muted">{sg.detail}</p>
+                <div className="mt-2 flex gap-2">
+                  <button type="button" onClick={() => store.acceptSuggestion(sg)} className="h-9 rounded-sm bg-primary px-3.5 text-[13px] font-semibold text-on-primary">적용하기</button>
+                  <button type="button" onClick={() => store.snoozeSuggestion(sg, today)} className="h-9 rounded-sm px-3 text-[13px] font-medium text-muted">나중에</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <MonthlyRecap />
       <BackupReminder />
 
-      {isRest ? (
-        <Card className="mt-4 p-6">
-          <div className="grid h-12 w-12 place-items-center rounded-full bg-strong"><Coffee size={22} /></div>
-          <h2 className="mt-4 text-[22px] font-medium tracking-[-0.44px]">{log.title || '푹 쉬는 날'}</h2>
-          <p className="mt-2 text-[14px] leading-[1.6] text-body">근육은 운동할 때 자극받고 회복할 때 성장합니다. 오늘은 충분히 쉬어 주세요.</p>
-          <div className="mt-5 rounded-sm bg-soft p-4">
-            <p className="text-[12px] font-semibold text-muted">내일 ({WEEKDAYS[weekday(tomorrow)]})</p>
-            <p className="mt-1 text-[15px] font-semibold">{tomorrowPlan.items.length ? tomorrowPlan.title : '휴식'}</p>
-          </div>
-        </Card>
-      ) : (
-        <>
-          <Card className="mt-4 p-6 shadow-float">
-            <p className="text-[22px] font-medium leading-[1.25] tracking-[-0.44px]">오늘은 {log.title}!</p>
-            <div className="mt-5 flex items-end justify-between">
-              <div>
-                <p className="text-[12px] font-bold text-muted">오늘의 운동 완료율</p>
-                <p className="tabular mt-1 text-[64px] font-bold leading-[1.05] tracking-[-1px]">
-                  {pct}<span className="ml-0.5 text-[28px] tracking-normal">%</span>
-                </p>
-              </div>
-              <div className="pb-2 text-right text-[14px] text-muted">
-                <p className="flex items-center justify-end gap-1"><Clock3 size={14} /> 약 {lo}~{hi}분</p>
-                <p className="tabular mt-1">{done} / {total} 세트</p>
-              </div>
-            </div>
-            <div className="mt-4"><ProgressBar value={pct} /></div>
-            {nextEx && (
-              <button type="button" onClick={() => goTo(firstOpen)}
-                className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-sm bg-primary text-[16px] font-medium text-on-primary active:bg-primary-active">
-                {done === 0 ? <><Play size={16} fill="currentColor" />운동 시작하기</> : <>이어하기 · {variantName(nextEx.name, nextEx.id, log.items[firstOpen].level)}<ArrowRight size={16} /></>}
-              </button>
-            )}
-
-            <div className="mt-6 border-t border-hairline-soft pt-4">
-              <p className="mb-2 text-[14px] font-semibold">{isTestDay ? '오늘 잴 것 (각 1번씩)' : state.settings.autoProgram ? '오늘 해야 할 것 (추천)' : '오늘의 목표'}</p>
-              <ul className="space-y-1.5 text-[14px]">
-                {mains.map(({ it }) => {
-                  const ex = getEx(it.exerciseId)!;
-                  const ok = it.sets.every((s) => s.done);
-                  return (
-                    <li key={`${it.exerciseId}-${it.label ?? ''}`} className="flex justify-between gap-3">
-                      <span className={ok ? 'text-muted line-through' : 'text-body'}>{it.label ?? variantName(ex.name, ex.id, it.level)}</span>
-                      <span className="tabular shrink-0 text-muted">{it.test ? (ok ? formatTarget(ex, it.sets[0].actual) : '최대') : `${it.sets.length}세트 × ${formatTarget(ex, it.sets[0]?.target ?? 0)}`}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          </Card>
-
-          {pct === 100 && (
-            <div className="animate-rise mt-4 flex items-start gap-3 rounded-md bg-ink p-5 text-canvas">
-              <PartyPopper size={22} className="mt-0.5 shrink-0 text-primary" />
-              <div>
-                <p className="text-[16px] font-semibold">오늘의 운동 완료!</p>
-                <p className="mt-1 text-[14px] opacity-80">{total}세트를 모두 마쳤습니다. 기록은 자동으로 저장되었습니다. {goalLeft > 0 ? `${g.m}월 ${g.d}일까지 ${goalLeft}일, 오늘도 한 칸 가까워졌습니다.` : '이제 충분히 회복해 주세요.'}</p>
-              </div>
-            </div>
-          )}
-
-          <div className="mt-6">
-            <p className="mb-2 text-[14px] font-medium text-muted">오늘 컨디션은 어떤가요?</p>
-            <Segmented<Condition>
-              value={log.condition ?? 'good'}
-              onChange={(c) => store.setCondition(today, c)}
-              options={[{ value: 'good', label: '좋아요' }, { value: 'tired', label: '피곤해요' }, { value: 'pain', label: '통증 있어요' }]}
-            />
-            {log.condition && CONDITION_MSG[log.condition] && (
-              <p className="mt-3 rounded-sm bg-soft p-3.5 text-[14px] leading-[1.55] text-body">{CONDITION_MSG[log.condition]}</p>
-            )}
-          </div>
-
-          {isTestDay ? (
-            <div className="mt-6 rounded-sm bg-soft px-3.5 py-3 text-[13px] leading-[1.6] text-body">
-              <p className="font-semibold text-ink">테스트 데이 하는 방법</p>
-              <ol className="mt-1 list-decimal space-y-0.5 pl-4">
-                <li>준비운동을 평소대로 합니다.</li>
-                <li>테스트는 항목마다 <b className="text-ink">한 번씩만</b>, 사이에 2~3분 쉽니다.</li>
-                <li>짜내지 말고 <b className="text-ink">바른 자세로 가능한 마지막 횟수</b>에서 멈춥니다. 어깨가 불편하면 바로 중단합니다.</li>
-                <li>끝나면 <b className="text-ink">기록</b> 버튼으로 숫자를 적고, 마무리 스트레칭으로 끝냅니다.</li>
-              </ol>
-            </div>
-          ) : (
-            <p className="mt-6 rounded-sm bg-soft px-3.5 py-3 text-[13px] leading-[1.55] text-body">
-              <b className="text-ink">하는 방법</b> · 세트를 끝내면 동그라미를 누르세요. 목표보다 덜 했거나 더 했다면 옆의 <b className="text-ink">수정</b>을 눌러 실제 횟수를 적으면 됩니다.
-            </p>
-          )}
-
-          {warmups.length > 0 && (
-            <>
-              <SectionTitle right={<span className="text-[13px] text-muted">{warmups.length}개</span>}>준비운동</SectionTitle>
-              <div className="space-y-3">{warmups.map(card)}</div>
-            </>
-          )}
-          {mains.length > 0 && (
-            <>
-              <SectionTitle right={<span className="text-[13px] text-muted">{mains.length}개</span>}>{isTestDay ? '테스트' : '본 운동'}</SectionTitle>
-              <div className="space-y-3">{mains.map(card)}</div>
-            </>
-          )}
-          {cools.length > 0 && (
-            <>
-              <SectionTitle right={<span className="text-[13px] text-muted">약 {cools.reduce((a, { it }) => a + (getEx(it.exerciseId)?.unit === 'min' ? it.sets[0]?.target ?? 0 : 0), 0)}분</span>}>마무리 스트레칭</SectionTitle>
-              <div className="space-y-3">{cools.map(card)}</div>
-            </>
-          )}
-        </>
+      {isTestDay && (
+        <div className="mt-5 rounded-sm bg-soft px-3.5 py-3 text-[13px] leading-[1.6] text-body">
+          <p className="font-semibold text-ink">테스트 데이 하는 방법</p>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+            <li>준비운동을 평소대로 합니다.</li>
+            <li>테스트는 항목마다 <b className="text-ink">한 번씩만</b>, 사이에 2~3분 쉽니다.</li>
+            <li>짜내지 말고 <b className="text-ink">바른 자세로 가능한 마지막 횟수</b>에서 멈춥니다. 통증이 있거나 자세가 무너지면 즉시 종료합니다.</li>
+            <li>끝나면 <b className="text-ink">기록</b> 버튼으로 숫자를 적고, 스트레칭으로 끝냅니다.</li>
+          </ol>
+        </div>
       )}
+
+      {groups.map(({ p, list }) => list.length > 0 && (
+        <div key={p}>
+          <SectionTitle right={<span className="text-[13px] text-muted">{list.length}개</span>}>
+            {p === 'warmup' ? '운동 전 준비운동' : p === 'main' ? (isTestDay ? '테스트' : isRest ? '선택 스트레칭' : '본운동') : isRest ? '선택 스트레칭' : '운동 후 스트레칭'}
+          </SectionTitle>
+          <div className="space-y-3">{list.map(card)}</div>
+        </div>
+      ))}
+
+      {isRest && (
+        <Card className="mt-4 p-4">
+          <p className="flex items-center gap-1.5 text-[13px] font-semibold text-muted"><Coffee size={14} />내일 ({WEEKDAYS[weekday(tomorrow)]})</p>
+          <p className="mt-1 text-[15px] font-semibold">{tomorrowPlan?.title ?? '휴식'}{tomorrowPlan?.time ? <span className="font-normal text-muted"> · {tomorrowPlan.time}</span> : null}</p>
+        </Card>
+      )}
+
+      <button type="button" onClick={() => setBed(true)} className="mt-6 flex w-full items-center gap-3 rounded-md border border-hairline p-4 text-left">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-strong"><Moon size={18} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold">자기 전 5분 루틴</span>
+          <span className="block text-[13px] text-muted">가슴 · 목 · 고양이-소 · 복식호흡 {log.bedtime?.filter(Boolean).length ? `· ${log.bedtime.filter(Boolean).length}/4 완료` : '(선택)'}</span>
+        </span>
+        <ChevronRight size={16} className="text-muted" />
+      </button>
 
       <MotivationSheet open={boost} onClose={() => setBoost(false)} />
       <ChangePreviewSheet open={preview} onClose={() => setPreview(false)} />
+      <BedtimeSheet open={bed} onClose={() => setBed(false)} />
+      <AfterSheet open={after} onClose={() => setAfter(false)} />
     </div>
   );
 }
+
