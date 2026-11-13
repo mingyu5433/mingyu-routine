@@ -113,14 +113,14 @@ export function ExerciseCard({ id, item, open, onOpenChange, onToggle, onRecord,
           {isMain && ex.gear === 'band' && onGear && (
             bandDraft !== null ? (
               <div className="mt-3 flex gap-2">
-                <input autoFocus value={bandDraft} onChange={(e) => setBandDraft(e.target.value)} maxLength={30} placeholder="예: 빨강 굵은 밴드, 무릎"
+                <input autoFocus value={bandDraft} onChange={(e) => setBandDraft(e.target.value)} maxLength={30} placeholder="예: 빨강"
                   className="h-11 min-w-0 flex-1 rounded-sm border border-hairline bg-canvas px-3 text-[15px] outline-none focus:border-2 focus:border-ink" />
                 <button type="button" onClick={() => { onGear({ band: bandDraft.trim() }); setBandDraft(null); }} className="h-11 rounded-sm bg-ink px-4 text-[14px] font-medium text-canvas">저장</button>
               </div>
             ) : (
               <button type="button" onClick={() => setBandDraft(item.band ?? '')}
                 className="mt-3 flex w-full items-center justify-between rounded-sm border border-hairline px-3.5 py-2.5 text-left text-[14px]">
-                <span><span className="text-muted">사용한 밴드 · </span><b>{item.band || '기록하기'}</b></span>
+                <span><span className="text-muted">사용한 밴드 · </span><b>{item.band || '색깔 적기 (선택)'}</b></span>
                 <Pencil size={13} className="text-muted" />
               </button>
             )
