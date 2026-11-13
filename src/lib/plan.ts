@@ -1,59 +1,54 @@
-import type { AppState, Area, DayLog, Exercise, ItemLog, PlanItem } from '../types';
+import type { AppState, Area, DayLog, Exercise, ExState, ItemLog, PlanItem } from '../types';
 import { getEx } from '../data/exercises';
-import { diffDays, weekday } from './date';
+import { weekday } from './date';
 
-export const PLAN_WEEKS = 8;
-
-/** 명세서 Ⅺ. 운동 발전 계획 — 8주 */
-export const PLAN_PHASES = [
-  { weeks: [1, 2], name: '적응 단계', range: '1~2주차', goals: ['각 근력운동 1~2세트부터 시작', '자세와 통증 여부 확인', '실패 지점까지 운동하지 않기', '유산소는 20분 전후로 시작', '철봉에서는 안전한 발 지지와 어깨 조절 연습'] },
-  { weeks: [3, 4], name: '기초 근력 단계', range: '3~4주차', goals: ['회복이 충분하다면 목표 세트로 증가', '목표 반복 횟수에 점진적으로 접근', '걷기 25~35분으로 증가', '푸쉬업 지지대 높이와 풀업 보조 정도 기록'] },
-  { weeks: [5, 6], name: '점진적 강화', range: '5~6주차', goals: ['푸쉬업 12회가 안정적이면 지지대 높이를 조금 낮추기', '발 보조 풀업이 안정되면 보조량 줄이기', '스쿼트가 쉬워지면 천천히 내려가는 동작으로 난도 조절', '유산소 시간 점진적으로 늘리기'] },
-  { weeks: [7, 8], name: '수행 능력 점검', range: '7~8주차', goals: ['푸쉬업 최대 정확 반복 횟수 확인', '안전한 환경에서 풀업 수행 능력 확인', '스쿼트 자세와 반복 횟수 확인', '걷기 시간 및 체감 난도 확인', '통증이 있거나 자세가 무너지면 테스트 즉시 종료'] },
-];
-
-export const planWeek = (state: AppState, date: string) => {
-  const start = state.settings.planStart;
-  if (!start) return 1;
-  return Math.floor(diffDays(date, start) / 7) + 1; // 시작 전이면 0 이하
-};
-export const phaseIndex = (week: number) => (week <= 2 ? 0 : week <= 4 ? 1 : week <= 6 ? 2 : 3);
-
-const isStrength = (ex?: Exercise) => !!ex && (ex.category === 'strength' || ex.category === 'pull') && ex.unit !== 'min';
 export const phaseOfItem = (it: { phase?: ItemLog['phase']; exerciseId: string }) =>
   it.phase ?? (getEx(it.exerciseId)?.category === 'warmup' ? 'warmup' : getEx(it.exerciseId)?.category === 'mobility' ? 'cool' : 'main');
 
 const clamp = (v: number, r?: [number, number]) => (r ? Math.min(r[1], Math.max(r[0], v)) : v);
 
-/** 일정 항목 → 오늘 수행할 목표 (수락한 진행 상태 + 8주 단계 반영) */
-export function resolveItem(p: PlanItem, state: AppState, date: string): Pick<ItemLog, 'lv'> & { sets: number; target: number } {
+export const exStateOf = (state: AppState, exId: string): ExState => state.settings.exState?.[exId] ?? {};
+/** 지금 난도 단계 (단계가 없는 운동이면 undefined) */
+export const levelOf = (state: AppState, ex?: Exercise) =>
+  ex?.levels ? Math.min(ex.levels.length - 1, exStateOf(state, ex.id).lv ?? ex.startLv ?? 0) : undefined;
+
+/** 일정 항목 → 그날 수행할 목표 */
+export function resolveItem(p: PlanItem, state: AppState, _date: string): Pick<ItemLog, 'lv' | 'band' | 'kg'> & { sets: number; target: number } {
   const ex = getEx(p.exerciseId);
-  const st = state.settings.exState?.[p.exerciseId] ?? {};
-  const week = planWeek(state, date);
-  let sets = p.sets;
+  const main = (p.phase ?? 'main') === 'main';
+  const lv = main ? levelOf(state, ex) : undefined;
+  const st = exStateOf(state, p.exerciseId);
   let target = p.target;
-  if ((p.phase ?? 'main') === 'main') {
-    target = clamp(p.target + (st.bump ?? 0), p.range);
-    // 1~2주차 적응 단계, 그리고 목표 세트로 늘리기에 동의하기 전까지는 근력운동 최대 2세트
-    if (isStrength(ex) && (week <= 2 || !state.settings.fullSets)) sets = Math.min(sets, 2);
-    // 1~2주차 유산소는 20분 전후로 시작
-    if (ex?.unit === 'min' && ex.category === 'cardio' && week <= 2) target = Math.min(target, 20);
-  }
-  return { sets, target, lv: ex?.levels ? st.lv ?? 0 : undefined };
+  // 달리기 인터벌은 단계가 목표(달리는 시간)를 정합니다
+  if (ex?.interval && lv !== undefined) target = ex.levels![lv].target ?? target;
+  return {
+    sets: p.sets, target, lv,
+    ...(main && ex?.gear === 'band' && st.band ? { band: st.band } : {}),
+    ...(main && ex?.gear === 'kg' && st.kg ? { kg: st.kg } : {}),
+  };
 }
 
-// ── 다음 단계 제안 (자동 변경하지 않고 사용자 확인 후 적용) ─────────────
+/** 이 운동이 일정에서 쓰는 목표(세트·횟수·범위) */
+export function planOf(state: AppState, exId: string): PlanItem | undefined {
+  for (const plan of Object.values(state.schedule)) {
+    const p = plan.items.find((q) => q.exerciseId === exId && (q.phase ?? 'main') === 'main');
+    if (p) return p;
+  }
+  return undefined;
+}
+
+// ── 성장 제안 (자동으로 바꾸지 않고, 확인을 누를 때만 적용) ─────────────
 export interface Suggestion {
   exId: string;
-  kind: 'reps' | 'level';
+  kind: 'calibrate' | 'reps' | 'level';
   title: string;
   detail: string;
-  patch: { bump?: number; lv?: number };
+  patch: { target?: number; lv?: number; calibrated?: boolean };
 }
 
 const painAreas = (log?: DayLog): Area[] => [...(log?.check?.pain ?? []), ...(log?.after?.pain ?? [])];
 
-/** 이 운동이 들어간 최근 본운동 기록 (테스트 제외) */
+/** 이 운동이 들어간 본운동 기록 (테스트 제외, 최근 순) */
 export function sessionsOf(state: AppState, exId: string, before?: string) {
   return Object.keys(state.logs).sort().reverse()
     .filter((d) => !before || d < before)
@@ -61,50 +56,80 @@ export function sessionsOf(state: AppState, exId: string, before?: string) {
     .filter((x): x is { d: string; log: DayLog; item: ItemLog } => !!x.item && x.item.sets.some((s) => s.done));
 }
 
-export function suggestions(state: AppState, today: string): Suggestion[] {
-  const out: Suggestion[] = [];
-  const seen = new Set<string>();
-  for (const plan of Object.values(state.schedule)) {
-    for (const p of plan.items) {
-      if ((p.phase ?? 'main') !== 'main' || seen.has(p.exerciseId)) continue;
-      seen.add(p.exerciseId);
-      const ex = getEx(p.exerciseId);
-      if (!ex) continue;
-      const last = sessionsOf(state, ex.id).filter((x) => x.d <= today).slice(0, 2);
-      if (last.length < 2) continue;
-      const allHit = last.every((x) => x.item.sets.every((s) => s.done && s.actual >= s.target));
-      if (!allHit) continue;
-      // 통증이 기록된 운동은 난도 증가를 제안하지 않음
-      if (ex.areas?.length && last.some((x) => painAreas(x.log).some((a) => ex.areas!.includes(a)))) continue;
-      if (last.some((x) => x.log.after?.pain.length && !ex.areas?.length)) continue;
-      const snooze = state.settings.snooze?.[ex.id];
-      if (snooze && snooze >= last[0].d) continue;
-
-      const st = state.settings.exState?.[ex.id] ?? {};
-      const bump = st.bump ?? 0;
-      // 이 운동이 들어간 모든 요일 중 범위 최대치까지 남은 여유
-      const room = Math.max(0, ...Object.values(state.schedule).flatMap((pl) => pl.items.filter((q) => q.exerciseId === ex.id && (q.phase ?? 'main') === 'main' && q.range).map((q) => q.range![1] - q.target)));
-      const surplus = Math.min(...last.flatMap((x) => x.item.sets.map((s) => s.actual - s.target)));
-      const step = ex.unit === 'reps' ? (surplus >= 3 ? 2 : 1) : 5;
-      const u = ex.unit === 'reps' ? '회' : ex.unit === 'sec' ? '초' : '분';
-      if (bump < room) {
-        const nb = Math.min(room, bump + step);
-        out.push({ exId: ex.id, kind: 'reps', title: `${ex.name} 목표를 ${nb - bump}${u} 늘릴까요?`, detail: `최근 2번 모두 목표를 채웠고 통증 기록이 없습니다. 적용하면 다음 운동부터 세트당 ${nb - bump}${u}씩 늘어납니다.`, patch: { bump: nb } });
-      } else if (ex.levels && (st.lv ?? 0) < ex.levels.length - 1) {
-        const next = ex.levels[(st.lv ?? 0) + 1];
-        out.push({ exId: ex.id, kind: 'level', title: `${ex.name} 다음 단계: ${next.name}`, detail: `목표 범위 최대치를 2번 연속 채웠습니다. ${next.how} 적용하면 목표 횟수는 범위의 시작 값으로 돌아갑니다.`, patch: { lv: (st.lv ?? 0) + 1, bump: 0 } });
-      }
-    }
-  }
-  return out;
+/** 같은 난도에서 한 지난 기록 (세트별 비교용) */
+export function previousOf(state: AppState, exId: string, before: string, lv?: number) {
+  return sessionsOf(state, exId, before).find((x) => lv === undefined || x.item.lv === lv);
 }
 
-/** 적응 단계가 끝나 목표 세트로 늘릴 시점인지 */
-export function fullSetsDue(state: AppState, today: string) {
-  if (state.settings.fullSets) return false;
-  if (planWeek(state, today) < 3) return false;
-  const recentPain = Object.keys(state.logs).filter((d) => diffDays(today, d) <= 7 && d <= today).some((d) => painAreas(state.logs[d]).length > 0);
-  return !recentPain;
+const hadPain = (ex: Exercise, x: { log: DayLog; item: ItemLog }) =>
+  !!x.item.stopped || painAreas(x.log).some((a) => !ex.areas?.length || ex.areas.includes(a));
+
+const unitOf = (ex: Exercise) => (ex.unit === 'reps' ? '회' : ex.unit === 'sec' ? '초' : '분');
+
+export function suggestionFor(state: AppState, exId: string, today: string): Suggestion | null {
+  const ex = getEx(exId);
+  const p = planOf(state, exId);
+  if (!ex || !p) return null;
+  const st = exStateOf(state, exId);
+  const lv = levelOf(state, ex);
+  const target = ex.interval && lv !== undefined ? ex.levels![lv].target ?? p.target : p.target;
+  const all = sessionsOf(state, exId).filter((x) => x.d <= today && !x.item.subFor);
+  const same = all.filter((x) => lv === undefined || x.item.lv === lv);
+  if (!same.length) return null;
+  const snooze = state.settings.snooze?.[exId];
+  if (snooze && snooze >= same[0].d) return null;
+  const u = unitOf(ex);
+
+  // 첫 운동 뒤: 실제로 한 횟수에 목표를 맞춥니다
+  if (ex.firstTry && !st.calibrated) {
+    const done = same[0].item.sets.filter((s) => s.done);
+    const proposed = clamp(Math.min(...done.map((s) => s.actual)), p.range);
+    if (done.length && proposed !== target && !(proposed > target && hadPain(ex, same[0]))) {
+      return {
+        exId, kind: 'calibrate',
+        title: `${ex.name} 목표를 ${proposed}${u}로 맞출까요?`,
+        detail: `최근 기록에서 세트마다 ${done.map((s) => s.actual).join(' · ')}${u}를 하셨습니다. 적용하면 다음 운동부터 세트당 ${proposed}${u}가 목표입니다. 마지막 1~3${u} 정도 여유가 남는 강도가 기본입니다.`,
+        patch: { target: proposed, calibrated: true },
+      };
+    }
+  }
+
+  // 같은 난도에서 2번 연속 모든 세트를 안정적으로 채웠을 때만
+  const last = same.slice(0, 2);
+  if (last.length < 2) return null;
+  const stable = last.every((x) => x.item.sets.length > 0 && x.item.sets.every((s) => s.done && s.actual >= s.target && (s.rir === undefined || s.rir >= 1)));
+  if (!stable || last.some((x) => hadPain(ex, x))) return null;
+
+  const max = p.range?.[1];
+  if (!ex.interval && max !== undefined && target < max) {
+    const surplus = Math.min(...last.flatMap((x) => x.item.sets.map((s) => s.actual - s.target)));
+    const next = Math.min(max, target + (surplus >= 3 ? 2 : 1));
+    return {
+      exId, kind: 'reps',
+      title: `${ex.name} 목표를 ${next}${u}로 올릴까요?`,
+      detail: `최근 두 번 모든 세트를 목표대로 마쳤고 통증 기록이 없습니다. 적용하면 다음 운동부터 세트당 ${next}${u}입니다.`,
+      patch: { target: next },
+    };
+  }
+  if (ex.levels && lv !== undefined && lv < ex.levels.length - 1) {
+    const nx = ex.levels[lv + 1];
+    const nt = nx.target ?? p.range?.[0] ?? target;
+    return {
+      exId, kind: 'level',
+      title: `${ex.name} 다음 단계: ${nx.name}`,
+      detail: ex.interval
+        ? `최근 두 번 편하게 마쳤고 무릎 통증 기록이 없습니다. ${nx.how}.`
+        : `목표 상한(${target}${u})을 두 번 연속 모든 세트에서 채웠습니다. ${nx.how} 적용하면 목표는 ${nt}${u}부터 다시 시작합니다.`,
+      patch: { lv: lv + 1, target: ex.interval ? undefined : nt },
+    };
+  }
+  return null;
+}
+
+export function suggestions(state: AppState, today: string): Suggestion[] {
+  const ids = new Set<string>();
+  for (const plan of Object.values(state.schedule)) for (const p of plan.items) if ((p.phase ?? 'main') === 'main') ids.add(p.exerciseId);
+  return [...ids].map((id) => suggestionFor(state, id, today)).filter((x): x is Suggestion => !!x);
 }
 
 /** 컨디션 체크로 표시할 경고 */
@@ -114,7 +139,7 @@ export function warningFor(ex: Exercise | undefined, log: DayLog): string | null
   const hit = (ex.areas ?? []).filter((a) => log.check!.pain.includes(a));
   if (!hit.length) return null;
   const names = hit.map((a) => AREA_LABEL[a]).join('·');
-  return `오늘 ${names} 통증을 체크하셨습니다. 이 운동은 ${names}에 부담이 갈 수 있습니다. 통증이 생기면 바로 멈추세요.${ex.alt ? ` 대체 운동: ${ex.alt}` : ' 오늘은 건너뛰어도 괜찮습니다.'}`;
+  return `오늘 ${names} 통증을 체크하셨습니다. 이 운동은 ${names}에 부담이 갈 수 있습니다. 통증이 생기면 바로 멈추세요.${ex.alt ? ` 대체: ${ex.alt}` : ''}`;
 }
 
 export const isPlanWorkoutDay = (state: AppState, date: string) => {

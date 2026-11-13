@@ -1,19 +1,17 @@
-import { Check, ChevronLeft, ChevronRight, Trophy } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { Check, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
 import { daysInMonth, longLabel, pad, parts, timeLabel, weekday } from '../lib/date';
-import {
-  bestSeries, cardioMinutes, completion, computeStats, dayKinds, daySets, isWorkoutDay, monthlyCounts, monthSummary, painLog, phaseOf, weekStrip, weeklySum,
-} from '../lib/stats';
-import { AREA_LABEL, PLAN_PHASES, PLAN_WEEKS, suggestions } from '../lib/plan';
-import { EXERCISES, formatTarget, getEx, unitLabel } from '../data/exercises';
-import { Card, Chip, PrimaryButton, SectionTitle, Segmented, Sheet } from '../components/ui';
-import { ChangePreviewSheet } from '../components/Boost';
+import { completion, dayKinds, daySets, growthSeries, isWorkoutDay, monthSummary, painLog } from '../lib/stats';
+import { AREA_LABEL, levelOf } from '../lib/plan';
+import { getEx, unitLabel } from '../data/exercises';
+import { MAIN_IDS } from '../data/v5';
+import { Card, PrimaryButton, SectionTitle, Segmented, Sheet, Stepper } from '../components/ui';
 
 const WD_SHORT = ['일', '월', '화', '수', '목', '금', '토'];
 
 export function RecordsScreen() {
-  const [view, setView] = useState<'calendar' | 'stats'>('calendar');
+  const [view, setView] = useState<'calendar' | 'growth'>('growth');
   const [detail, setDetail] = useState<string | null>(null);
   return (
     <div className="px-4 pb-8">
@@ -22,9 +20,9 @@ export function RecordsScreen() {
       </header>
       <div className="mt-4">
         <Segmented value={view} onChange={setView}
-          options={[{ value: 'calendar', label: '달력' }, { value: 'stats', label: '통계 · 성장' }]} />
+          options={[{ value: 'growth', label: '성장' }, { value: 'calendar', label: '달력' }]} />
       </div>
-      {view === 'calendar' ? <MonthView onPick={setDetail} /> : <StatsView />}
+      {view === 'calendar' ? <MonthView onPick={setDetail} /> : <GrowthView onPick={setDetail} />}
       <DayDetail date={detail} onClose={() => setDetail(null)} />
     </div>
   );
@@ -96,7 +94,7 @@ function MonthView({ onPick }: { onPick: (d: string) => void }) {
       </Card>
 
       <p className="mt-4 rounded-md bg-soft px-4 py-3 text-[14px] leading-[1.6] text-body">
-        {ym.m}월에는 <b className="tabular text-ink">{sum.days.length}일</b> 운동했고, 그중 <b className="tabular text-ink">{sum.full}일</b>은 모두 완료했습니다. 걷기는 총 <b className="tabular text-ink">{sum.walkMin}분</b>입니다.
+        {ym.m}월에는 <b className="tabular text-ink">{sum.days.length}일</b> 운동했고, 그중 <b className="tabular text-ink">{sum.full}일</b>은 모두 완료했습니다. 달리기·걷기는 총 <b className="tabular text-ink">{sum.walkMin}분</b>입니다.
       </p>
 
       <SectionTitle right={<span className="text-[13px] text-muted tabular">총 {sum.sets}세트</span>}>{ym.m}월에 운동한 날</SectionTitle>
@@ -135,142 +133,97 @@ function MonthView({ onPick }: { onPick: (d: string) => void }) {
   );
 }
 
-/* ───────────── 통계 · 성장 ───────────── */
-function Bars({ data, unit, highlightLast = true, note }: { data: { label: string; value: number; tag?: string }[]; unit: string; highlightLast?: boolean; note?: string }) {
-  const max = Math.max(1, ...data.map((d) => d.value));
-  if (!data.length) return <p className="py-3 text-[13px] text-muted">아직 기록이 없습니다. 운동을 기록하면 여기에 그래프가 쌓입니다.</p>;
+/* ───────────── 성장 ───────────── */
+const SHORT: Record<string, string> = { 'tyson-pushup': '타이슨', 'band-pullup': '밴드 풀업', squat: '스쿼트', 'hip-bridge': '힙 브리지', 'run-interval': '달리기' };
+
+function GrowthView({ onPick }: { onPick: (d: string) => void }) {
+  const { state, today, updateSettings } = useStore();
+  const [exId, setExId] = useState<string>(MAIN_IDS[0]);
+  const ex = getEx(exId)!;
+  const u = unitLabel(ex);
+  const all = useMemo(() => growthSeries(state, exId), [state, exId]);
+  const lvNow = levelOf(state, ex);
+  const lvs = [...new Set(all.map((x) => x.lv ?? lvNow ?? 0))].sort((a, b) => a - b);
+  const [lvPick, setLvPick] = useState<number | null>(null);
+  const lv = lvPick !== null && lvs.includes(lvPick) ? lvPick : all.length ? all[all.length - 1].lv ?? lvNow ?? 0 : lvNow ?? 0;
+  const rows = all.filter((x) => (x.lv ?? lvNow ?? 0) === lv);
+  const [metric, setMetric] = useState<'total' | 'best'>('total');
+  const series = rows.slice(-10);
+  const vals = series.map((x) => (ex.unit === 'min' ? x.total : metric === 'total' ? x.total : x.best));
+  const max = Math.max(1, ...vals);
+  const first = rows[0], last = rows[rows.length - 1];
+  const fv = first ? (metric === 'total' || ex.unit === 'min' ? first.total : first.best) : 0;
+  const lv2 = last ? (metric === 'total' || ex.unit === 'min' ? last.total : last.best) : 0;
+  const fp = state.settings.firstPullup;
+  const pain = useMemo(() => painLog(state).slice(0, 5), [state]);
+  const baseline = state.logs['2026-11-02']?.items.find((i) => i.test && i.exerciseId === 'pushup')?.sets[0];
+
   return (
     <div>
-      <div className="flex h-32 items-end gap-2">
-        {data.map((d, i) => (
-          <div key={i} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
-            <span className="tabular text-[11px] font-semibold">{d.value}</span>
-            <div className="flex w-full max-w-[36px] flex-1 items-end">
-              <div className={`w-full rounded-t-[5px] ${highlightLast && i === data.length - 1 ? 'bg-primary' : d.tag ? 'bg-ink' : 'bg-border-strong'}`} style={{ height: `${Math.max(4, (d.value / max) * 100)}%` }} />
-            </div>
-            <span className="tabular max-w-full truncate text-[10px] text-muted">{d.label}</span>
-          </div>
+      <div className="-mx-4 mt-5 flex gap-1.5 overflow-x-auto px-4 pb-1">
+        {MAIN_IDS.map((id) => (
+          <button key={id} type="button" onClick={() => { setExId(id); setLvPick(null); }} aria-pressed={id === exId}
+            className={`h-10 shrink-0 rounded-full px-4 text-[14px] font-semibold ${id === exId ? 'bg-ink text-canvas' : 'border border-hairline text-body'}`}>{SHORT[id]}</button>
         ))}
       </div>
-      <p className="mt-2 text-[11px] text-muted">{unit}{note ? ` · ${note}` : ''}</p>
-    </div>
-  );
-}
 
-function Row({ k, v }: { k: string; v: ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3 py-2.5">
-      <span className="text-[14px] text-body">{k}</span>
-      <span className="tabular text-right text-[15px] font-semibold">{v}</span>
-    </div>
-  );
-}
-
-function StatsView() {
-  const { state, today, updateSettings, acceptSuggestion, snoozeSuggestion } = useStore();
-  const st = useMemo(() => computeStats(state, today), [state, today]);
-  const strip = useMemo(() => weekStrip(state, today), [state, today]);
-  const ph = phaseOf(state, today);
-  const fp = state.settings.firstPullup;
-  const [preview, setPreview] = useState(false);
-  const sugs = useMemo(() => suggestions(state, today), [state, today]);
-  const months = useMemo(() => monthlyCounts(state, today, 4), [state, today]);
-  const minutes = useMemo(() => weeklySum(state, today, 6, (l) => l.after?.minutes ?? 0), [state, today]);
-  const cardio = useMemo(() => weeklySum(state, today, 6, cardioMinutes), [state, today]);
-  const pushS = useMemo(() => bestSeries(state, ['incline-pushup', 'pushup']), [state]);
-  const pullS = useMemo(() => bestSeries(state, ['foot-pullup']), [state]);
-  const squatS = useMemo(() => bestSeries(state, ['squat']), [state]);
-  const pains = useMemo(() => painLog(state), [state]);
-  const totalMin = Object.values(state.logs).reduce((a, l) => a + (l.after?.minutes ?? 0), 0);
-  const planned = strip.filter((x) => !x.mark.startsWith('rest') && x.d <= today).length;
-  const doneW = strip.filter((x) => x.mark === 'full' || x.mark === 'part').length;
-  const pullLv = state.settings.exState?.['foot-pullup']?.lv ?? 0;
-  const pullEx = getEx('foot-pullup');
-  const pushLv = state.settings.exState?.['incline-pushup']?.lv ?? 0;
-  const pushEx = getEx('incline-pushup');
-  const exStats = EXERCISES.filter((e) => st.perEx[e.id]);
-  const lab = (x: { d: string; test: boolean }) => `${parts(x.d).m}/${parts(x.d).d}${x.test ? '*' : ''}`;
-
-  return (
-    <>
-      <SectionTitle>이번 주 달성</SectionTitle>
-      <Card className="px-4 py-3">
-        <p className="text-[14px] leading-[1.6] text-body">
-          오늘까지 계획한 <b className="tabular text-ink">{planned}일</b> 중 <b className="tabular text-ink">{doneW}일</b> 운동했습니다{planned ? ` (${Math.round((doneW / Math.max(1, planned)) * 100)}%)` : ''}.
-          {st.streak > 0 ? <> 지금 <b className="text-primary">{st.streak}일 연속</b>입니다.</> : ' 오늘 한 세트로 다시 시작하면 됩니다.'}
-        </p>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-strong">
-          <div className="h-full rounded-full bg-primary" style={{ width: `${planned ? (doneW / planned) * 100 : 0}%` }} />
-        </div>
-      </Card>
-
-      <SectionTitle>월간 운동 횟수</SectionTitle>
-      <Card className="p-4"><Bars data={months} unit="운동한 날 (일)" /></Card>
-
-      <SectionTitle right={<span className="tabular text-[13px] text-muted">누적 {totalMin.toLocaleString()}분</span>}>총 운동 시간</SectionTitle>
-      <Card className="p-4"><Bars data={minutes} unit="주별 운동 시간 (분)" note="운동 끝에 남긴 기록 기준" /></Card>
-
-      <SectionTitle>푸쉬업 최대 반복</SectionTitle>
-      <Card className="p-4">
-        <p className="mb-3 text-[13px] text-muted">지금 난도 · <b className="text-ink">{pushEx?.levels?.[pushLv]?.name}</b></p>
-        <Bars data={pushS.map((x) => ({ label: lab(x), value: x.best, tag: x.test ? 't' : undefined }))} unit="그날 가장 많이 한 세트 (회)" note="*는 테스트 데이(일반 푸쉬업 최대)" />
-      </Card>
-
-      <SectionTitle>풀업 진행</SectionTitle>
-      <Card className="p-4">
-        <ol className="mb-3 flex flex-wrap gap-1.5">
-          {pullEx?.levels?.map((l, i) => (
-            <li key={l.name} className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${i < pullLv ? 'bg-ink text-canvas' : i === pullLv ? 'bg-primary text-on-primary' : 'bg-strong text-muted'}`}>{i + 1}. {l.name}</li>
-          ))}
-          <li className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${fp.achieved ? 'bg-primary text-on-primary' : 'bg-strong text-muted'}`}>첫 풀업</li>
-        </ol>
-        <Bars data={pullS.map((x) => ({ label: lab(x), value: x.best }))} unit="발 보조 풀업 그날 최고 (회)" />
-        <div className="mt-3 border-t border-hairline-soft pt-3">
-          {fp.achieved ? (
-            <p className="flex items-center gap-2 text-[14px]"><Trophy size={16} className="text-primary" />첫 풀업 성공 · {fp.date ? longLabel(fp.date) : ''}
-              <button onClick={() => { if (confirm('첫 풀업 기록을 취소할까요?')) updateSettings({ firstPullup: { achieved: false } }); }} className="ml-auto text-[12px] text-muted underline">취소</button></p>
-          ) : (
-            <PrimaryButton className="w-full" onClick={() => { if (confirm('보조 없이 풀업 1회에 성공하셨나요?')) updateSettings({ firstPullup: { achieved: true, date: today } }); }}>첫 풀업 성공 기록하기</PrimaryButton>
-          )}
-        </div>
-      </Card>
-
-      <SectionTitle>스쿼트 수행 변화</SectionTitle>
-      <Card className="p-4"><Bars data={squatS.map((x) => ({ label: lab(x), value: x.best, tag: x.test ? 't' : undefined }))} unit="맨몸 스쿼트 그날 최고 (회)" /></Card>
-
-      <SectionTitle>유산소 시간</SectionTitle>
-      <Card className="p-4"><Bars data={cardio} unit="주별 빠르게 걷기 (분)" note="장기 목표 주 150분" /></Card>
-
-      <SectionTitle right={<span className="text-[13px] text-muted">{pains.length}건</span>}>통증 기록</SectionTitle>
-      {pains.length === 0 ? (
-        <p className="rounded-md bg-soft p-4 text-[14px] text-muted">기록된 통증이 없습니다.</p>
-      ) : (
-        <Card>
-          <ul className="divide-y divide-hairline-soft">
-            {pains.slice(0, 12).map((p) => (
-              <li key={p.d} className="px-4 py-3 text-[14px]">
-                <p><b className="tabular">{parts(p.d).m}/{parts(p.d).d}</b> <span className="text-error">{p.areas.length ? p.areas.map((a) => AREA_LABEL[a]).join('·') : '통증'}</span> <span className="text-muted">· {p.when}</span></p>
-                {p.memo && <p className="mt-0.5 text-[13px] text-muted">{p.memo}</p>}
-              </li>
+      <Card className="mt-4 p-4">
+        <p className="text-[18px] font-semibold">{ex.name}</p>
+        {ex.levels && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {(lvs.length ? lvs : [lv]).map((k) => (
+              <button key={k} type="button" onClick={() => setLvPick(k)} aria-pressed={k === lv}
+                className={`h-8 rounded-full px-3 text-[12px] font-semibold ${k === lv ? 'bg-primary-tint text-primary' : 'bg-strong text-muted'}`}>
+                {ex.levels![k]?.name}{k === lvNow ? ' · 지금' : ''}
+              </button>
             ))}
-          </ul>
-        </Card>
-      )}
-      <p className="mt-2 px-1 text-[12px] leading-[1.5] text-muted">통증이 지속되거나 악화되면 전문가의 평가를 받아 주세요. 통증이 기록된 운동은 다음 단계 제안이 멈춥니다.</p>
+          </div>
+        )}
+        {rows.length === 0 ? (
+          <p className="mt-4 rounded-sm bg-soft p-4 text-[14px] leading-[1.6] text-muted">아직 이 단계의 기록이 없습니다. 운동을 기록하면 세션마다 그래프가 쌓입니다.</p>
+        ) : (
+          <>
+            <p className="mt-3 text-[14px] leading-[1.6] text-body">
+              {rows.length === 1
+                ? <>첫 기록은 <b className="tabular text-ink">{fv}{u}</b>입니다. 다음 기록부터 변화가 보입니다.</>
+                : lv2 > fv
+                  ? <>이 단계 첫 기록 <b className="tabular text-ink">{fv}{u}</b>에서 최근 <b className="tabular text-ink">{lv2}{u}</b>로, <b className="text-primary">{lv2 - fv}{u}</b> 늘었습니다.</>
+                  : <>이 단계에서 {rows.length}번 기록했습니다. 최근 기록은 <b className="tabular text-ink">{lv2}{u}</b>입니다.</>}
+            </p>
+            {ex.unit !== 'min' && (
+              <div className="mt-3 w-44"><Segmented value={metric} onChange={setMetric} options={[{ value: 'total', label: '세션 합계' }, { value: 'best', label: '최고 세트' }]} /></div>
+            )}
+            <div className="mt-4 flex h-36 items-end gap-1.5">
+              {series.map((x, i) => (
+                <button key={x.d} type="button" onClick={() => onPick(x.d)} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
+                  <span className="tabular text-[11px] font-semibold">{vals[i]}</span>
+                  <div className="flex w-full max-w-[32px] flex-1 items-end">
+                    <div className={`w-full rounded-t-[5px] ${i === series.length - 1 ? 'bg-primary' : 'bg-border-strong'}`} style={{ height: `${Math.max(5, (vals[i] / max) * 100)}%` }} />
+                  </div>
+                  <span className="tabular max-w-full truncate text-[10px] text-muted">{parts(x.d).m}/{parts(x.d).d}</span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-muted">{ex.unit === 'min' ? '달린 시간(분)' : metric === 'total' ? `세트 합계(${u})` : `가장 많이 한 세트(${u})`} · 같은 단계끼리만 비교합니다</p>
+          </>
+        )}
+      </Card>
 
-      {sugs.length > 0 && (
+      {rows.length > 0 && (
         <>
-          <SectionTitle>다음 단계 제안</SectionTitle>
+          <SectionTitle right={<span className="text-[13px] text-muted">{rows.length}번</span>}>세션 기록</SectionTitle>
           <Card>
             <ul className="divide-y divide-hairline-soft">
-              {sugs.map((sg) => (
-                <li key={sg.exId} className="px-4 py-3">
-                  <p className="text-[14px] font-semibold">{sg.title}</p>
-                  <p className="mt-0.5 text-[12px] text-muted">{sg.detail}</p>
-                  <div className="mt-2 flex gap-2">
-                    <button type="button" onClick={() => acceptSuggestion(sg)} className="h-9 rounded-sm bg-primary px-3.5 text-[13px] font-semibold text-on-primary">적용하기</button>
-                    <button type="button" onClick={() => snoozeSuggestion(sg, today)} className="h-9 rounded-sm px-3 text-[13px] font-medium text-muted">나중에</button>
-                  </div>
+              {[...rows].reverse().slice(0, 12).map((x) => (
+                <li key={x.d}>
+                  <button type="button" onClick={() => onPick(x.d)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+                    <span className="tabular w-12 shrink-0 text-[13px] text-muted">{parts(x.d).m}/{parts(x.d).d}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="tabular block text-[15px] font-semibold">{x.sets.join(' · ')}{u}</span>
+                      {(x.band || x.kg || x.stopped) && <span className="block truncate text-[12px] text-muted">{[x.band && `밴드 ${x.band}`, x.kg && `+${x.kg}kg`, x.stopped && '통증으로 중단'].filter(Boolean).join(' · ')}</span>}
+                    </span>
+                    <span className="tabular text-[14px] font-semibold text-muted">{ex.unit === 'min' ? `${x.total}분` : `총 ${x.total}`}</span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -278,88 +231,96 @@ function StatsView() {
         </>
       )}
 
-      <TestCompare />
-
-      <SectionTitle>운동별 누적 · 최고 기록</SectionTitle>
-      {exStats.length === 0 ? (
-        <p className="rounded-md bg-soft p-5 text-center text-[14px] text-muted">세트를 완료하면 이곳에 운동별 기록이 쌓입니다.</p>
-      ) : (
-        <Card className="px-4">
-          <div className="divide-y divide-hairline-soft">
-            {exStats.map((e) => {
-              const s = st.perEx[e.id];
-              return <Row key={e.id} k={e.name} v={<>{formatTarget(e, s.best)} <span className="text-[12px] font-normal text-muted">최고 · 누적 {s.total.toLocaleString()}{unitLabel(e)}</span></>} />;
-            })}
-          </div>
+      {exId === 'tyson-pushup' && (
+        <p className="mt-4 rounded-md bg-soft px-4 py-3 text-[13px] leading-[1.6] text-body">
+          <b className="text-ink">초기 참고 기록</b> · 일반 푸쉬업 최대 {baseline?.done ? baseline.actual : 20}회 (11/2). 타이슨 푸쉬업과는 다른 운동이라 숫자를 서로 바꿔 쓰지 않습니다.
+        </p>
+      )}
+      {exId === 'band-pullup' && (
+        <Card className="mt-4 p-4">
+          <p className="text-[14px] leading-[1.6] text-body"><b className="text-ink">맨몸 풀업</b> · 시작 기준 0회. 목표는 1회 → 3회 → 5회입니다. 달성 시점은 사람마다 다릅니다.</p>
+          {fp.achieved ? (
+            <p className="mt-3 flex items-center gap-2 text-[14px] font-semibold text-primary"><Check size={16} strokeWidth={3} />첫 맨몸 풀업 {fp.date ? `${parts(fp.date).m}/${parts(fp.date).d}` : ''}
+              <button type="button" onClick={() => { if (confirm('첫 풀업 기록을 취소할까요?')) updateSettings({ firstPullup: { achieved: false } }); }} className="ml-auto text-[12px] font-normal text-muted underline">취소</button></p>
+          ) : (
+            <PrimaryButton className="mt-3 w-full" onClick={() => { if (confirm('밴드 없이 풀업 1회에 성공하셨나요?')) updateSettings({ firstPullup: { achieved: true, date: today } }); }}>첫 맨몸 풀업 성공 기록하기</PrimaryButton>
+          )}
         </Card>
       )}
 
-      <SectionTitle right={<span className="text-[13px] text-muted">{ph.before ? '시작 전' : `${Math.min(ph.week, PLAN_WEEKS)}주차`}</span>}>8주 발전 계획</SectionTitle>
-      <div className="space-y-3">
-        {PLAN_PHASES.map((p, i) => {
-          const cur = i === ph.idx && !ph.before, past = i < ph.idx;
-          return (
-            <Card key={p.name} className={`p-4 ${cur ? 'border-ink shadow-float' : ''}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className={`grid h-6 w-6 place-items-center rounded-full text-[12px] font-semibold ${past ? 'bg-ink text-canvas' : cur ? 'bg-primary text-on-primary' : 'bg-strong text-muted'}`}>
-                    {past ? <Check size={13} strokeWidth={3} /> : i + 1}
-                  </span>
-                  <p className={`text-[16px] font-semibold ${!cur && !past ? 'text-muted' : ''}`}>{p.name}</p>
-                </div>
-                {cur ? <Chip tone="primary">지금</Chip> : <span className="text-[13px] text-muted">{p.range}</span>}
-              </div>
-              <ul className={`mt-2.5 space-y-1 pl-8 text-[14px] ${cur ? 'text-body' : 'text-muted'}`}>
-                {p.goals.map((g) => <li key={g}>{g}</li>)}
-              </ul>
-            </Card>
-          );
-        })}
-      </div>
-      <p className="mt-3 px-1 text-[12px] leading-[1.5] text-muted">변화의 속도는 개인차가 크며 결과를 보장하지 않습니다. 장비가 늘면(예: 운동용 밴드) 밴드 로우를 주 2~3회 추가하는 것이 권장됩니다.</p>
-      <button type="button" onClick={() => setPreview(true)}
-        className="mt-4 flex h-12 w-full items-center justify-center rounded-sm border border-ink text-[15px] font-medium">
-        한 달 · 크리스마스 · 세 달 · 네 달 뒤 변화 보기
-      </button>
-      <ChangePreviewSheet open={preview} onClose={() => setPreview(false)} />
-    </>
+      <SectionTitle>통증 기록</SectionTitle>
+      {pain.length === 0 ? (
+        <p className="rounded-md bg-soft p-4 text-[14px] text-muted">기록된 통증이 없습니다.</p>
+      ) : (
+        <Card>
+          <ul className="divide-y divide-hairline-soft">
+            {pain.map((p) => (
+              <li key={p.d}>
+                <button type="button" onClick={() => onPick(p.d)} className="flex w-full items-baseline gap-3 px-4 py-3 text-left">
+                  <span className="tabular w-12 shrink-0 text-[13px] text-muted">{parts(p.d).m}/{parts(p.d).d}</span>
+                  <span className="min-w-0 flex-1 text-[14px]"><b>{p.areas.map((a) => AREA_LABEL[a]).join('·') || '통증'}</b> · {p.when}{p.memo ? <span className="block truncate text-[12px] text-muted">{p.memo}</span> : null}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      <p className="mt-2 px-1 text-[12px] leading-[1.5] text-muted">통증이 계속되거나 심해지면 전문가에게 확인받아 주세요.</p>
+
+      <TestCompare />
+    </div>
   );
 }
 
-/* ───────────── 날짜 상세 ───────────── */
-function DayDetail({ date, onClose }: { date: string | null; onClose: () => void }) {
-  const { state } = useStore();
+/* ───────────── 날짜 상세 (기록 수정 가능) ───────────── */
+export function DayDetail({ date, onClose }: { date: string | null; onClose: () => void }) {
+  const { state, recordSet } = useStore();
   const log = date ? state.logs[date] : undefined;
+  const [edit, setEdit] = useState<{ i: number; j: number; v: number } | null>(null);
   return (
-    <Sheet open={!!date} onClose={onClose} title={date ? longLabel(date) : ''}>
-      {log && (
+    <Sheet open={!!date} onClose={() => { setEdit(null); onClose(); }} title={date ? longLabel(date) : ''}>
+      {!log ? (
+        <p className="rounded-sm bg-soft p-4 text-[14px] text-muted">이 날은 기록이 없습니다.</p>
+      ) : (
         <div>
-          <p className="text-[14px] text-muted">{log.title} · 완료율 {completion(log)}% · {daySets(log).done}/{daySets(log).total} 세트</p>
-          {(log.check || log.after) && (
+          <p className="text-[14px] text-muted">{log.title} · {daySets(log).done}/{daySets(log).total} 세트{log.after?.minutes ? ` · ${log.after.minutes}분` : ''}</p>
+          {(log.check || log.after?.rpe || log.after?.pain.length || log.after?.memo) && (
             <div className="mt-3 rounded-sm bg-soft px-3.5 py-2.5 text-[13px] leading-[1.6] text-body">
               {log.check && <p>운동 전 · 수면 {log.check.sleep}시간 · 피로도 {log.check.fatigue}/5{log.check.sore ? ' · 근육통' : ''} · {log.check.pain.length ? `${log.check.pain.map((a) => AREA_LABEL[a]).join('·')} 통증` : '통증 없음'}</p>}
-              {log.after && <p>운동 후 · {log.after.minutes}분 · 체감 난도 {log.after.rpe}/10 · {log.after.pain.length ? `${log.after.pain.map((a) => AREA_LABEL[a]).join('·')} 통증` : '통증 없음'}</p>}
+              {log.after && (log.after.rpe > 0 || log.after.pain.length > 0) && <p>운동 후 · {log.after.rpe ? `체감 난도 ${log.after.rpe}/10 · ` : ''}{log.after.pain.length ? `${log.after.pain.map((a) => AREA_LABEL[a]).join('·')} 통증` : '통증 없음'}</p>}
               {log.after?.memo && <p className="mt-1 text-ink">“{log.after.memo}”</p>}
             </div>
           )}
-          <ul className="mt-4 space-y-3">
+          <p className="mt-4 flex items-center gap-1 text-[12px] text-muted"><Pencil size={11} />세트를 누르면 횟수를 고칠 수 있습니다</p>
+          <ul className="mt-2 space-y-3">
             {log.items.map((it, i) => {
               const ex = getEx(it.exerciseId);
               if (!ex) return null;
+              const u = unitLabel(ex);
               return (
                 <li key={i} className="rounded-sm border border-hairline p-3.5">
                   <p className="text-[15px] font-semibold">{it.label ?? ex.name}{it.lv !== undefined && ex.levels?.[it.lv] ? <span className="text-[12px] font-normal text-muted"> · {ex.levels[it.lv].name}</span> : null}</p>
+                  {(it.band || it.kg || it.subFor || it.stopped) && <p className="text-[12px] text-muted">{[it.band && `밴드 ${it.band}`, it.kg && `+${it.kg}kg`, it.subFor && `${getEx(it.subFor)?.name} 대신`, it.stopped && '통증으로 중단'].filter(Boolean).join(' · ')}</p>}
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {it.sets.map((s, j) => (
-                      <span key={j} className={`tabular rounded-full px-2.5 py-1 text-[12px] font-medium ${s.done ? 'bg-primary-tint text-primary' : 'bg-strong text-muted-soft'}`}>
-                        {j + 1}세트 {s.done ? `${s.actual}${unitLabel(ex)}` : '–'}{s.done && s.doneAt ? ` · ${timeLabel(s.doneAt)}` : ''}
-                      </span>
+                      <button key={j} type="button" onClick={() => setEdit({ i, j, v: s.done ? s.actual : s.target })}
+                        className={`tabular rounded-full px-2.5 py-1 text-[12px] font-medium ${edit?.i === i && edit.j === j ? 'ring-2 ring-ink' : ''} ${s.done ? 'bg-primary-tint text-primary' : 'bg-strong text-muted-soft'}`}>
+                        {j + 1}세트 {s.done ? `${s.actual}${u}` : '–'}{s.done && s.doneAt ? ` · ${timeLabel(s.doneAt)}` : ''}
+                      </button>
                     ))}
                   </div>
+                  {edit?.i === i && (
+                    <div className="mt-3 flex items-center justify-between gap-2 rounded-sm bg-soft p-2.5">
+                      <span className="text-[13px] font-medium">{edit.j + 1}세트</span>
+                      <Stepper size="sm" value={edit.v} min={0} max={999} suffix={u} onChange={(v) => setEdit({ ...edit, v })} />
+                      <button type="button" onClick={() => { recordSet(date!, edit.i, edit.j, edit.v); setEdit(null); }} className="h-9 rounded-sm bg-ink px-3.5 text-[13px] font-medium text-canvas">저장</button>
+                    </div>
+                  )}
                 </li>
               );
             })}
           </ul>
+          <p className="mt-3 text-[12px] text-muted">0으로 저장하면 그 세트는 안 한 것으로 바뀝니다.</p>
         </div>
       )}
     </Sheet>
@@ -382,7 +343,7 @@ function TestCompare() {
   }
   return (
     <>
-      <SectionTitle>테스트 기록</SectionTitle>
+      <SectionTitle>테스트 데이 기록</SectionTitle>
       <Card>
         <div style={{ gridTemplateColumns: `1fr repeat(${days.length}, auto)` }} className="grid items-center gap-x-3 border-b border-hairline-soft px-4 py-2.5 text-[12px] font-semibold text-muted">
           <span>항목</span>
@@ -406,7 +367,7 @@ function TestCompare() {
           );
         })}
       </Card>
-      <p className="mt-2 px-1 text-[12px] text-muted">같은 방식으로 잰 숫자끼리 비교해야 정확합니다. 재테스트도 바른 자세 기준으로 재 주세요.</p>
+      
     </>
   );
 }

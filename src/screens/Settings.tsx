@@ -49,45 +49,28 @@ export function SettingsScreen({ onEditSchedule }: { onEditSchedule: () => void 
         <p className="text-[13px] leading-[1.5] text-muted">모든 화면 맨 아래에 보입니다. 비워 두면 동기부여 문장이 무작위로 나옵니다.</p>
         <textarea value={s.selfNote ?? ''} maxLength={80} rows={2}
           onChange={(e) => updateSettings({ selfNote: e.target.value })}
-          placeholder="예: 민규야, 12월 20일의 너는 지금의 너에게 고마워할 거다."
+          placeholder="예: 운동은 강하게, 관절은 아프지 않게."
           className="mt-2.5 w-full resize-none rounded-sm border border-hairline bg-canvas px-3.5 py-3 text-[15px] leading-[1.5] outline-none focus:border-2 focus:border-ink" />
         <p className="mt-1 text-right text-[11px] text-muted-soft tabular">{(s.selfNote ?? '').length}/80</p>
       </Card>
 
       <SectionTitle>휴식 타이머</SectionTitle>
       <Card>
-        <Row title="일반 운동" desc="세트 완료 후 자동 시작">
+        <Row title="기본 휴식" desc="운동별 휴식을 따로 정하지 않았을 때">
           <Stepper size="sm" value={s.restDefault} min={15} max={600} step={15} suffix="초" onChange={(v) => updateSettings({ restDefault: v })} />
-        </Row>
-        <Row title="풀업 계열" desc="매달리기 · 풀업 동작">
-          <Stepper size="sm" value={s.restPull} min={15} max={600} step={15} suffix="초" onChange={(v) => updateSettings({ restPull: v })} />
         </Row>
         <Row title="종료 알림음"><Toggle label="종료 알림음" checked={s.sound} onChange={(v) => updateSettings({ sound: v })} /></Row>
         <Row title="진동" desc="지원 기기에서만 동작 (아이폰 Safari 미지원)" last>
           <Toggle label="진동" checked={s.haptic} onChange={(v) => updateSettings({ haptic: v })} />
         </Row>
       </Card>
-      <p className="mt-2 px-1 text-[12px] leading-[1.5] text-muted">준비운동·스트레칭은 짧은 고정 휴식(15~30초)을 사용합니다. 아이폰에서는 앱이 백그라운드에 있을 때 알림이 울리지 않을 수 있으며, 앱으로 돌아오면 남은 시간이 정확히 다시 계산됩니다.</p>
+      <p className="mt-2 px-1 text-[12px] leading-[1.5] text-muted">본운동 휴식은 운동마다 정해져 있고(타이슨 2분 · 밴드 풀업 2분 30초 · 스쿼트 1분 45초 · 힙 브리지 1분 15초), 운동 탭에서 바꿀 수 있습니다. 준비운동·스트레칭은 타이머 없이 다음 동작으로 넘어갑니다. 아이폰에서는 앱이 백그라운드에 있을 때 알림이 울리지 않을 수 있으며, 앱으로 돌아오면 남은 시간이 정확히 다시 계산됩니다.</p>
 
       <SectionTitle>프로그램</SectionTitle>
       <Card>
         <button onClick={onEditSchedule} className="flex w-full items-center gap-3 border-b border-hairline-soft px-4 py-4 text-left">
-          <CalendarDays size={18} /><span className="flex-1 text-[15px] font-medium">운동 일정 수정</span><ChevronRight size={16} className="text-muted" />
+          <CalendarDays size={18} /><span className="flex-1 text-[15px] font-medium">본운동 목표 · 휴식 시간 바꾸기</span><ChevronRight size={16} className="text-muted" />
         </button>
-        <Row title="무릎 회복 모드" desc="스쿼트·힙 브리지 등 무릎에 부담 가는 운동을 빼고 진행">
-          <Toggle label="무릎 회복 모드" checked={!!s.kneeRest} onChange={(v) => updateSettings({ kneeRest: v })} />
-        </Row>
-        <Row title="8주 진행 반영" desc="적응 단계 세트 제한 · 수락한 목표와 난도를 오늘 목표에 반영">
-          <Toggle label="8주 진행 반영" checked={s.autoProgram} onChange={(v) => updateSettings({ autoProgram: v })} />
-        </Row>
-        <Row title="8주 프로그램 시작일" desc="이 날이 1주차 · 1~2주차는 적응 단계">
-          <input type="date" value={s.planStart ?? ''}
-            onChange={(e) => e.target.value && updateSettings({ planStart: e.target.value })}
-            className="h-10 rounded-sm border border-hairline bg-canvas px-2.5 text-[14px] outline-none focus:border-ink" />
-        </Row>
-        <Row title="근력운동 목표 세트" desc={s.fullSets ? '목표 세트(3세트)로 진행 중' : '적응 단계: 최대 2세트'}>
-          <Toggle label="목표 세트로 늘리기" checked={!!s.fullSets} onChange={(v) => updateSettings({ fullSets: v })} />
-        </Row>
         <Row title="목표일" desc="홈 화면 D-day 기준">
           <input type="date" value={s.goalDate} min={s.startDate}
             onChange={(e) => e.target.value && updateSettings({ goalDate: e.target.value })}

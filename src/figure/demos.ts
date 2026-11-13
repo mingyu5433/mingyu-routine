@@ -9,7 +9,8 @@ export type Prop =
   | { t: 'box'; x: number; y: number; w: number; h: number }
   | { t: 'chair'; x: number; y: number; w: number; floor: number }
   | { t: 'ring'; cx: number; cy: number; r: number }
-  | { t: 'arrow'; a: P; b: P };
+  | { t: 'arrow'; a: P; b: P }
+  | { t: 'band'; x1: number; x2: number; y: number }; // 철봉에 건 보조밴드 (무릎에 걸림)
 
 export interface Frame { p: Pose; label?: string; hold?: number; move?: number }
 export interface Demo { frames: Frame[]; props: Prop[]; thumb?: number }
@@ -119,6 +120,62 @@ export const DEMOS: Record<string, Demo> = {
       { p: walk([101, 110], [108, 95], [99, 96], [101, 96], 0, 30), move: 380 },
       { p: walk([83, 109], [120, 109], [116, 86], [86, 88], 35, -15), move: 380 },
       { p: walk([108, 95], [101, 110], [101, 96], [99, 96], 30, 0), move: 380 },
+    ],
+  },
+
+  // ── 요청서(11/13) 본운동 ─────────────────────────
+  'tyson-pushup': {
+    thumb: 1,
+    props: [FLOOR, { t: 'wall', x: 19, y1: 58, y2: 110 }],
+    frames: [
+      { p: { sh: [92, 80], torso: -27, hn: [116, 106], fn: [34, 104], tn: 155, kb: [1, 1], hl: ['chest', 'arm'] }, label: '발뒤꿈치를 벽에 대고, 팔을 편 채 엉덩이를 발뒤꿈치 쪽으로', hold: 500, move: 1600 },
+      { p: { sh: [118, 95], torso: -6, hn: [116, 106], fn: [34, 104], tn: 155, hl: ['chest', 'arm'] }, label: '앞으로 미끄러지듯 나와 가슴을 바닥 가까이 · 팔꿈치는 몸통 쪽 30~45도', hold: 300, move: 1100 },
+      { p: { sh: [116, 72], torso: -21, hn: [116, 106], fn: [34, 104], tn: 155, hl: ['chest', 'arm'] }, label: '바닥을 밀어 팔을 펴고, 다시 엉덩이를 뒤로 (1회)', hold: 200, move: 1300 },
+    ],
+  },
+  'band-pullup': {
+    props: [BAR, { t: 'band', x1: 104, x2: 110, y: 11 }, { t: 'floor', y: 134 }],
+    frames: [
+      { p: { sh: [100, 50], torso: -90, hn: [101, 13], hf: [99, 13], fn: [78, 100], ff: [81, 98], tn: 160, tf: 160, hl: ['back', 'arm'] }, label: '밴드에 무릎을 걸고 팔 편 채 · 어깨를 귀에서 멀리', hold: 600, move: 1600 },
+      { p: { sh: [99, 21], torso: -87, neck: -82, hn: [106, 12], hf: [104, 12], fn: [77, 71], ff: [80, 69], tn: 160, tf: 160, hl: ['back', 'arm'] }, label: '팔꿈치를 옆구리로 당겨 턱이 철봉 높이까지 · 반동 없이', hold: 300, move: 2600 },
+    ],
+  },
+  'run-interval': {
+    props: [FLOOR],
+    frames: [
+      { p: { hip: [100, 60], torso: -80, hn: [116, 56], hf: [86, 74], eb: [-1, 1], fn: [124, 104], ff: [76, 90], tn: -10, tf: 40, kb: [-1, -1], hl: ['thigh', 'calf'] }, label: '짧은 문장으로 대화가 되는 속도 · 발은 몸 가까이 가볍게', move: 330 },
+      { p: { hip: [100, 57], torso: -80, hn: [104, 64], hf: [100, 66], eb: [-1, 1], fn: [102, 110], ff: [110, 86], tn: 0, tf: 40, hl: ['thigh', 'calf'] }, move: 330 },
+      { p: { hip: [100, 60], torso: -80, hn: [86, 74], hf: [116, 56], eb: [-1, 1], fn: [76, 90], ff: [124, 104], tn: 40, tf: -10, hl: ['thigh', 'calf'] }, move: 330 },
+      { p: { hip: [100, 57], torso: -80, hn: [100, 66], hf: [104, 64], eb: [-1, 1], fn: [110, 86], ff: [102, 110], tn: 40, tf: 0, hl: ['thigh', 'calf'] }, move: 330 },
+    ],
+  },
+  'arm-open-close': {
+    props: [FLOOR],
+    frames: [
+      { p: { hip: [100, 62], torso: -90, front: true, hn: [53, 28], hf: [147, 28], eb: [1, -1], fn: [93, 110], ff: [107, 110], hl: ['chest'] }, label: '양팔을 어깨 높이로 옆으로 벌려 가슴 열기', hold: 300, move: 900 },
+      { p: { hip: [100, 62], torso: -90, front: true, hn: [118, 33], hf: [82, 37], eb: [1, -1], fn: [93, 110], ff: [107, 110], hl: ['shoulder'] }, label: '가슴 앞에서 가볍게 교차 · 위로 가는 팔을 번갈아', hold: 200, move: 900 },
+    ],
+  },
+  'wall-scap-pushup': {
+    thumb: 0,
+    props: [FLOOR, { t: 'wall', x: 150, y1: 0, y2: 110 }, { t: 'arrow', a: [118, 14], b: [126, 18] }],
+    frames: [
+      { p: { sh: [113, 30.5], torso: -72, hn: [149, 40], hf: [148, 41], fn: [88, 110], ff: [85, 110], tn: 0, tf: 0, hl: ['back'] }, label: '팔은 거의 편 채 벽을 밀어 날개뼈 벌리기', hold: 400, move: 1000 },
+      { p: { sh: [116.5, 31.5], torso: -70.5, hn: [149, 40], hf: [148, 41], fn: [88, 110], ff: [85, 110], tn: 0, tf: 0, hl: ['back'] }, label: '팔꿈치는 그대로, 날개뼈만 모아 가슴이 살짝 벽 쪽으로', hold: 400, move: 1000 },
+    ],
+  },
+  'leg-swing': {
+    props: [FLOOR, { t: 'wall', x: 66, y1: 0, y2: 110 }],
+    frames: [
+      { p: stand({ hn: [72, 44], fn: [128, 103], tn: -40, hl: ['hamstring'] }), label: '벽을 짚고 바깥쪽 다리를 앞으로 가볍게', move: 750 },
+      { p: stand({ hn: [72, 44], fn: [76, 104], tn: 30, hl: ['hipflexor'] }), label: '뒤로 가볍게 · 상체는 곧게', move: 750 },
+    ],
+  },
+  'ankle-mobility': {
+    props: [FLOOR, { t: 'wall', x: 152, y1: 0, y2: 110 }, { t: 'arrow', a: [126, 66], b: [138, 66] }],
+    frames: [
+      { p: { hip: [106, 64], torso: -84, hn: [151, 44], hf: [150, 46], fn: [126, 110], ff: [86, 110], tn: 0, tf: 0, kb: [1, -1], hl: ['calf'] }, label: '벽을 마주 보고 한 발 앞 · 뒤꿈치는 바닥에', hold: 400, move: 1300 },
+      { p: { hip: [111, 66], torso: -83, hn: [151, 45], hf: [150, 47], fn: [126, 110], ff: [90, 110], tn: 0, tf: 0, kb: [1, -1], hl: ['calf'] }, label: '뒤꿈치를 붙인 채 무릎을 발끝 쪽으로 천천히', hold: 600, move: 1300 },
     ],
   },
 

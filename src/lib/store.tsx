@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { AfterNote, AppState, Condition, ConditionCheck, DayLog, DayPlan, ItemLog, Settings, SetLog } from '../types';
-import { defaultSchedule, KNEE_LOAD, type SchedulePreset } from '../data/schedule';
+import type { AfterNote, AppState, Area, Condition, ConditionCheck, DayLog, DayPlan, ExState, ItemLog, Settings, SetLog } from '../types';
+import { defaultSchedule } from '../data/schedule';
 import { getEx } from '../data/exercises';
 import { todayKey, weekday } from './date';
 import { resolveItem, type Suggestion } from './plan';
@@ -23,11 +23,8 @@ export function defaultState(): AppState {
       startDate: todayKey(),
       goalDate: '2026-12-20',
       autoProgram: true,
-      testDays: { '2026-11-02': 'upper', '2026-12-20': 'full', '2027-01-02': 'full' },
-      migV: 4,
-      kneeRest: false,
-      planStart: '2026-11-09',
-      fullSets: false,
+      testDays: { '2026-11-02': 'upper' },
+      migV: 5,
       exState: {},
       snooze: {},
       firstPullup: { achieved: false },
@@ -133,12 +130,12 @@ export function normalize(data: unknown): AppState {
   if (!data || typeof data !== 'object') throw new Error('형식이 올바르지 않습니다.');
   const s = data as Partial<AppState>;
   if (s.logs && typeof s.logs !== 'object') throw new Error('기록 데이터 형식이 올바르지 않습니다.');
-  const settings = { ...d.settings, ...(s.settings ?? {}), testDays: { ...d.settings.testDays, ...(s.settings?.testDays ?? {}) } };
+  const settings = { ...d.settings, ...(s.settings ?? {}), testDays: { ...(s.settings?.testDays ?? d.settings.testDays) } };
   let schedule = migrateSchedule(s.schedule && typeof s.schedule === 'object' ? { ...d.schedule, ...s.schedule } : d.schedule);
   if ((s.settings?.migV ?? 0) < 2) { schedule = migrateV2(schedule); settings.migV = 2; }
   // v3 (11/5): 무릎 부상 → 상체 A/B 주 4회 강화 프로그램으로 일정 교체, 무릎 회복 모드 켜기
   if ((s.settings?.migV ?? 0) < 3) {
-    schedule = defaultSchedule('upper');
+    schedule = defaultSchedule();
     settings.migV = 3;
     settings.kneeRest = true;
     const logs = { ...(s.logs ?? {}) };
@@ -148,11 +145,23 @@ export function normalize(data: unknown): AppState {
   }
   // v4 (11/8): 명세서 주 6일 전신 프로그램 · 8주 진행 · 무릎 회복 완료
   if ((s.settings?.migV ?? 0) < 4) {
-    schedule = defaultSchedule('spec');
+    schedule = defaultSchedule();
     Object.assign(settings, { migV: 4, kneeRest: false, planStart: '2026-11-09', fullSets: false, exState: {}, snooze: {} });
     settings.testDays = { ...settings.testDays, '2027-01-02': 'full' };
     const logs = { ...(s.logs ?? {}) };
     const t = todayKey();
+    if (logs[t] && !logs[t].items.some((i) => i.sets.some((x) => x.done))) delete logs[t];
+    s.logs = logs;
+  }
+  // v5 (11/13): 요청서 — 본운동 4가지(상체 A/B · 하체 A/B) + 토요일 달리기. 기록은 그대로 보존
+  if ((s.settings?.migV ?? 0) < 5) {
+    schedule = defaultSchedule();
+    const t = todayKey();
+    const logs = { ...(s.logs ?? {}) };
+    // 기록이 남은 지난 테스트 데이만 유지 (앞으로의 테스트 데이는 일정에서 뺍니다)
+    const testDays: Settings['testDays'] = {};
+    for (const [d, k] of Object.entries(settings.testDays ?? {})) if (d < t || logs[d]?.items.some((i) => i.sets.some((x) => x.done))) testDays[d] = k;
+    Object.assign(settings, { migV: 5, kneeRest: false, fullSets: undefined, planStart: undefined, exState: {}, snooze: {}, testDays });
     if (logs[t] && !logs[t].items.some((i) => i.sets.some((x) => x.done))) delete logs[t];
     s.logs = logs;
   }
@@ -168,34 +177,45 @@ export function normalize(data: unknown): AppState {
 const makeSets = (n: number, target: number) =>
   Array.from({ length: Math.max(1, n) }, () => ({ target, actual: target, done: false }));
 
-/** 일정 + (켜져 있으면) 추천 프로그램으로 그날의 기본 기록을 만듭니다. */
+/** 일정으로 그날의 기본 기록을 만듭니다. */
 export function buildDayLog(date: string, plan: DayPlan, state?: AppState): DayLog {
   const testKind = state?.settings.testDays?.[date];
-  if (testKind) {
-    const tl = buildTestLog(date, testKind, plan);
-    return state?.settings.kneeRest ? { ...tl, items: tl.items.filter((i) => !KNEE_LOAD.has(i.exerciseId)) } : tl;
-  }
-  const auto = state ? state.settings.autoProgram !== false : false;
-  const knee = !!state?.settings.kneeRest;
+  if (testKind) return buildTestLog(date, testKind, plan);
   const items: ItemLog[] = [];
-  for (const p of plan.items) {
+  for (const p of plan?.items ?? []) {
     if (!getEx(p.exerciseId)) continue;
-    if (knee && KNEE_LOAD.has(p.exerciseId)) continue;
-    const r = auto && state ? resolveItem(p, state, date) : { sets: p.sets, target: p.target, lv: undefined };
+    const r = state ? resolveItem(p, state, date) : { sets: p.sets, target: p.target };
+    const { sets, target, ...extra } = r;
     items.push({
-      exerciseId: p.exerciseId, sets: makeSets(r.sets, r.target),
+      exerciseId: p.exerciseId, sets: makeSets(sets, target),
       phase: p.phase, range: p.range, rest: p.rest,
-      ...(r.lv !== undefined ? { lv: r.lv } : {}),
+      ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined)),
       ...(p.optional ? { optional: true } : {}),
     });
   }
-  return { date, title: plan.title, items, ...(plan.time ? { time: plan.time } : {}) };
+  return { date, title: plan?.title ?? '휴식', items, ...(plan?.time ? { time: plan.time } : {}) };
+}
+
+/** 아직 세트를 체크하지 않은 오늘 항목을 지금 목표로 다시 만듭니다. */
+function refreshToday(s: AppState): AppState['logs'] {
+  const logs = { ...s.logs };
+  const t = todayKey();
+  const tl = logs[t];
+  if (!tl || s.settings.testDays?.[t]) return logs;
+  const fresh = buildDayLog(t, s.schedule[weekday(t)], s);
+  const items = tl.items.map((it) => {
+    if (it.sets.some((x) => x.done) || it.subFor) return it;
+    const f = fresh.items.find((x) => x.exerciseId === it.exerciseId && x.phase === it.phase);
+    return f ?? it;
+  });
+  logs[t] = { ...tl, items };
+  return logs;
 }
 
 const hasDone = (log?: DayLog) => !!log?.items.some((i) => i.sets.some((s) => s.done));
 
 function withCompletion(log: DayLog): DayLog {
-  const sets = log.items.flatMap((i) => (i.optional ? i.sets.filter((s) => s.done) : i.sets));
+  const sets = log.items.flatMap((i) => (i.optional || i.stopped ? i.sets.filter((s) => s.done) : i.sets));
   const all = sets.length > 0 && sets.every((s) => s.done);
   return { ...log, completedAt: all ? log.completedAt ?? Date.now() : undefined };
 }
@@ -258,10 +278,11 @@ function useStoreValue(initial: AppState) {
       });
     },
     /** 수정 버튼으로 실제 수행 횟수를 기록 (0이면 미완료로 되돌림) */
-    recordSet(date: string, i: number, j: number, actual: number) {
+    recordSet(date: string, i: number, j: number, actual: number, rir?: number) {
       mutateDay(date, (log) => {
         const set = log.items[i].sets[j];
         set.actual = actual;
+        if (rir === undefined) delete set.rir; else set.rir = rir;
         if (actual <= 0) { set.done = false; set.doneAt = undefined; set.actual = set.target; }
         else { if (!set.done) set.doneAt = Date.now(); set.done = true; }
         return log;
@@ -303,31 +324,66 @@ function useStoreValue(initial: AppState) {
     setBedtime(date: string, idx: number, v: boolean) {
       mutateDay(date, (log) => { const b = [...(log.bedtime ?? [])]; b[idx] = v; return { ...log, bedtime: b }; });
     },
-    /** 제안 수락 · 난도 직접 변경 (오늘 아직 시작 전이면 오늘 목표도 바로 반영) */
-    setExState(exId: string, patch: { bump?: number; lv?: number }) {
+    /** 난도 단계 · 밴드 · 중량 등 운동별 상태 변경 (오늘 아직 시작 전이면 바로 반영) */
+    setExState(exId: string, patch: ExState) {
       setState((s) => {
         const exState = { ...(s.settings.exState ?? {}), [exId]: { ...(s.settings.exState?.[exId] ?? {}), ...patch } };
-        const logs = { ...s.logs };
-        const t = todayKey();
-        const tl = logs[t];
-        if (tl) {
-          const idx = tl.items.findIndex((i) => i.exerciseId === exId && !i.sets.some((x) => x.done));
-          if (idx >= 0) {
-            const plan = s.schedule[weekday(t)];
-            const p = plan?.items.find((q) => q.exerciseId === exId && (q.phase ?? 'main') === (tl.items[idx].phase ?? 'main'));
-            if (p) {
-              const r = resolveItem(p, { ...s, settings: { ...s.settings, exState } }, t);
-              const items = [...tl.items];
-              items[idx] = { ...items[idx], sets: makeSets(r.sets, r.target), lv: r.lv };
-              logs[t] = { ...tl, items };
-            }
-          }
-        }
-        return { ...s, settings: { ...s.settings, exState }, logs };
+        const next = { ...s, settings: { ...s.settings, exState } };
+        return { ...next, logs: refreshToday(next) };
       });
     },
-    acceptSuggestion(sg: Suggestion) {
-      actions.setExState(sg.exId, sg.patch);
+    /** 성장 제안 적용: 목표 횟수는 이 운동이 들어간 모든 요일에 함께 반영 */
+    applySuggestion(sg: Suggestion) {
+      setState((s) => {
+        const { target, ...rest } = sg.patch;
+        const schedule = { ...s.schedule };
+        if (target !== undefined) {
+          for (const k of Object.keys(schedule)) {
+            const plan = schedule[Number(k)];
+            if (!plan.items.some((p) => p.exerciseId === sg.exId)) continue;
+            schedule[Number(k)] = { ...plan, items: plan.items.map((p) => (p.exerciseId === sg.exId && (p.phase ?? 'main') === 'main' ? { ...p, target } : p)) };
+          }
+        }
+        const exState = { ...(s.settings.exState ?? {}), [sg.exId]: { ...(s.settings.exState?.[sg.exId] ?? {}), ...rest, calibrated: true } };
+        const next = { ...s, schedule, settings: { ...s.settings, exState } };
+        return { ...next, logs: refreshToday(next) };
+      });
+    },
+    /** 통증 → 이 운동 중단 (남은 세트는 하지 않음) */
+    stopItem(date: string, i: number, pain: Area[]) {
+      mutateDay(date, (log) => {
+        const it = log.items[i];
+        it.stopped = true;
+        const done = it.sets.filter((x) => x.done);
+        if (done.length) it.sets = done;
+        if (pain.length) {
+          const a = log.after ?? { rpe: 0, pain: [], memo: '', minutes: 0 };
+          log.after = { ...a, pain: [...new Set([...a.pain, ...pain])] };
+        }
+        return log;
+      });
+    },
+    /** 통증 → 대체 동작으로 바꾸기 (이미 한 세트는 원래 운동 기록으로 남김) */
+    substitute(date: string, i: number, subId: string, pain: Area[]) {
+      mutateDay(date, (log) => {
+        const it = log.items[i];
+        const done = it.sets.filter((x) => x.done);
+        const left = Math.max(1, it.sets.length - done.length);
+        const t = it.sets[0]?.target ?? getEx(subId)?.defaultTarget ?? 8;
+        const sub: ItemLog = { exerciseId: subId, subFor: it.exerciseId, phase: 'main', rest: it.rest, sets: makeSets(left, t) };
+        if (done.length) { it.stopped = true; it.sets = done; log.items.splice(i + 1, 0, sub); }
+        else log.items[i] = sub;
+        if (pain.length) {
+          const a = log.after ?? { rpe: 0, pain: [], memo: '', minutes: 0 };
+          log.after = { ...a, pain: [...new Set([...a.pain, ...pain])] };
+        }
+        return log;
+      });
+    },
+    /** 밴드 메모 · 추가 중량 기록 (다음 운동에도 그대로 이어짐) */
+    setGear(date: string, i: number, exId: string, patch: { band?: string; kg?: number }) {
+      mutateDay(date, (log) => { Object.assign(log.items[i], patch); return log; });
+      setState((s) => ({ ...s, settings: { ...s.settings, exState: { ...(s.settings.exState ?? {}), [exId]: { ...(s.settings.exState?.[exId] ?? {}), ...patch } } } }));
     },
     snoozeSuggestion(sg: Suggestion, date: string) {
       setState((s) => ({ ...s, settings: { ...s.settings, snooze: { ...(s.settings.snooze ?? {}), [sg.exId]: date } } }));
@@ -340,6 +396,19 @@ function useStoreValue(initial: AppState) {
         // 오늘 아직 아무 세트도 체크하지 않았다면 바뀐 일정을 바로 반영
         if (weekday(t) === wd && !hasDone(logs[t])) delete logs[t];
         return { ...s, schedule, logs };
+      });
+    },
+    /** 본운동 목표(세트 · 횟수 · 휴식)를 이 운동이 들어간 모든 요일에 한 번에 반영 */
+    setMainPlan(exerciseId: string, patch: { sets?: number; target?: number; rest?: number }) {
+      setState((s) => {
+        const schedule = { ...s.schedule };
+        for (const k of Object.keys(schedule)) {
+          const plan = schedule[Number(k)];
+          if (!plan.items.some((p) => p.exerciseId === exerciseId)) continue;
+          schedule[Number(k)] = { ...plan, items: plan.items.map((p) => (p.exerciseId === exerciseId && (p.phase ?? 'main') === 'main' ? { ...p, ...patch } : p)) };
+        }
+        const next = { ...s, schedule };
+        return { ...next, logs: refreshToday(next) };
       });
     },
     /** 일정에 포함된 모든 요일의 목표를 한 번에 변경 */
@@ -360,12 +429,12 @@ function useStoreValue(initial: AppState) {
         return { ...s, schedule, logs };
       });
     },
-    resetSchedule(preset: SchedulePreset = 'spec') {
+    resetSchedule() {
       setState((s) => {
         const logs = { ...s.logs };
         const t = todayKey();
         if (!hasDone(logs[t])) delete logs[t];
-        return { ...s, schedule: defaultSchedule(preset), logs };
+        return { ...s, schedule: defaultSchedule(), logs };
       });
     },
     updateSettings(patch: Partial<Settings>) {
@@ -373,7 +442,7 @@ function useStoreValue(initial: AppState) {
         const logs = { ...s.logs };
         const t = todayKey();
         // 프로그램 설정이 바뀌면 아직 시작하지 않은 오늘 목표를 다시 계산
-        if (['autoProgram', 'startDate', 'kneeRest', 'planStart', 'fullSets'].some((k) => k in patch) && !hasDone(logs[t])) {
+        if (['startDate'].some((k) => k in patch) && !hasDone(logs[t])) {
           const tl = logs[t];
           if (tl) delete logs[t];
           if (tl?.check) logs[t] = { ...buildDayLog(t, s.schedule[weekday(t)], { ...s, settings: { ...s.settings, ...patch }, logs }), check: tl.check, startedAt: tl.startedAt };

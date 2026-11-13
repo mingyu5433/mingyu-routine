@@ -37,7 +37,7 @@ export const daysSince = (ms?: number) => (ms ? Math.floor((Date.now() - ms) / 8
 /** 세트 단위 CSV (엑셀·구글 시트에서 열기) */
 export function exportCsv(state: AppState) {
   const esc = (v: unknown) => { const t = String(v ?? ''); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-  const head = ['날짜', '운동 종류', '구분', '운동명', '난도', '세트', '목표', '실제', '단위', '완료', '총 운동 시간(분)', '체감 난도', '통증', '메모', '수면(시간)', '피로도'];
+  const head = ['날짜', '운동 종류', '구분', '운동명', '난도', '밴드', '추가 중량(kg)', '대체·중단', '세트', '목표', '실제', '단위', '여유(RIR)', '완료', '총 운동 시간(분)', '체감 난도', '통증', '메모', '수면(시간)', '피로도'];
   const rows: string[] = [head.join(',')];
   const PH: Record<string, string> = { warmup: '준비운동', main: '본운동', cool: '스트레칭' };
   for (const d of Object.keys(state.logs).sort()) {

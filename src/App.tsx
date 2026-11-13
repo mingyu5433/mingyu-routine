@@ -7,7 +7,7 @@ import { RecordsScreen } from './screens/Records';
 import { SettingsScreen } from './screens/Settings';
 import { RestTimer } from './components/RestTimer';
 import { Footer } from './components/Footer';
-import { ConditionSheet, Player } from './components/Session';
+import { Player } from './components/Session';
 
 type Tab = 'today' | 'workout' | 'records' | 'settings';
 const TABS: { id: Tab; label: string; icon: typeof Dumbbell }[] = [
@@ -35,9 +35,7 @@ export default function App() {
   const { state } = useStore();
   const [tab, setTab] = useState<Tab>('today');
   const [player, setPlayer] = useState(false);
-  const [check, setCheck] = useState(false);
-  const { today, dayLog } = useStore();
-  const start = () => { if (dayLog(today).check) setPlayer(true); else setCheck(true); };
+  const start = () => setPlayer(true);
   useTheme(state.settings.theme);
 
   useEffect(() => { window.scrollTo(0, 0); }, [tab]);
@@ -54,7 +52,6 @@ export default function App() {
 
       {!player && <RestTimer />}
       <Player open={player} onClose={() => setPlayer(false)} />
-      <ConditionSheet open={check} onClose={() => setCheck(false)} onDone={() => { setCheck(false); setPlayer(true); }} />
 
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-hairline bg-canvas/95 backdrop-blur">
         <ul className="mx-auto flex h-[64px] max-w-[560px]">

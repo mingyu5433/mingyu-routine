@@ -40,11 +40,11 @@ export function useSetActions(date: string) {
       store.toggleSet(date, i, j);
       if (!wasDone) afterDone(i, j);
     },
-    record(i: number, j: number, actual: number) {
+    record(i: number, j: number, actual: number, rir?: number) {
       unlockAudio();
       if (!log.startedAt) store.markStarted(date);
       const wasDone = log.items[i].sets[j].done;
-      store.recordSet(date, i, j, actual);
+      store.recordSet(date, i, j, actual, rir);
       if (!wasDone && actual > 0) afterDone(i, j);
     },
   };

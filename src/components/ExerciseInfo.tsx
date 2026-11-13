@@ -3,13 +3,14 @@ import type { Exercise } from '../types';
 import { Chip } from './ui';
 import { FigureDemo, FigureStill } from '../figure/Figure';
 import { useStore } from '../lib/store';
+import { levelOf } from '../lib/plan';
 
 /** 운동 방법 · 잘못된 자세 · 주의사항 · 호흡법 · 초보자 팁 */
 export function ExerciseInfo({ ex, demo = true }: { ex: Exercise; demo?: boolean }) {
   const store = useStore();
-  const knee = !!store.state.settings.kneeRest;
-  const lvNow = store.state.settings.exState?.[ex.id]?.lv ?? 0;
-  const moves = ex.moves?.filter((m) => !(knee && m.knee));
+  const knee = false;
+  const lvNow = levelOf(store.state, ex) ?? 0;
+  const moves = ex.moves;
   return (
     <div className="space-y-5 text-[14px] leading-[1.6] text-body">
       {demo && !ex.moves?.length && <FigureDemo art={ex.art} />}
@@ -90,12 +91,12 @@ export function ExerciseInfo({ ex, demo = true }: { ex: Exercise; demo?: boolean
       {ex.levels && ex.levels.length > 0 && (
         <section>
           <h4 className="mb-1 flex items-center gap-1.5 text-[14px] font-semibold text-ink"><SlidersHorizontal size={15} />난도 조절</h4>
-          <p className="mb-2 text-[12px] text-muted">지금 단계를 직접 바꿀 수 있습니다. 바꾸면 목표 횟수는 범위의 시작 값으로 돌아갑니다.</p>
+          <p className="mb-2 text-[12px] text-muted">{ex.interval ? '지금 단계를 직접 바꿀 수 있습니다. 단계에 맞춰 달리는 시간이 정해집니다.' : '지금 단계를 직접 바꿀 수 있습니다. 목표 횟수는 그대로 두니, 필요하면 운동 탭에서 함께 바꿔 주세요. 단계가 바뀌면 성장 그래프도 따로 비교합니다.'}</p>
           <ol className="space-y-1.5">
             {ex.levels.map((l, i) => (
               <li key={l.name}>
                 <button type="button" disabled={i === lvNow}
-                  onClick={() => { if (confirm(`난도를 '${l.name}'(으)로 바꿀까요?`)) store.setExState(ex.id, { lv: i, bump: 0 }); }}
+                  onClick={() => { if (confirm(`난도를 '${l.name}'(으)로 바꿀까요?`)) store.setExState(ex.id, { lv: i }); }}
                   className={`flex w-full gap-2.5 rounded-sm border px-3 py-2.5 text-left ${i === lvNow ? 'border-primary bg-primary-tint' : 'border-hairline'}`}>
                   <span className={`tabular mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${i === lvNow ? 'bg-primary text-on-primary' : 'bg-strong text-muted'}`}>{i === lvNow ? <Check size={12} strokeWidth={3} /> : i + 1}</span>
                   <span><b className="text-ink">{l.name}</b>{i === lvNow ? ' · 지금 단계' : ''}<br /><span className="text-[13px] text-muted">{l.how}</span></span>

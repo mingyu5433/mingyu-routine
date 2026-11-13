@@ -30,9 +30,22 @@ export interface Exercise {
   stage?: string;        // 단계 안내 (예: "보조 풀업이 통증 없이 가능해진 뒤")
   purpose?: string;      // 운동 목적
   alt?: string;          // 대체 운동
-  levels?: { name: string; how: string }[]; // 난도 조절 단계 (0부터)
+  levels?: Level[];      // 난도 조절 단계 (0부터)
+  startLv?: number;      // 처음 시작하는 단계
+  subs?: string[];       // 통증이 있을 때 바꿀 수 있는 대체 동작 (운동 id)
+  restRange?: [number, number]; // 권장 휴식 범위(초)
+  firstTry?: string;     // 첫 운동 안내
+  gear?: 'band' | 'kg';  // 함께 기록할 것: 밴드 메모 / 추가 중량
+  interval?: boolean;    // 달리기·걷기 인터벌 (단계마다 구성)
   areas?: Area[];        // 부담이 가는 부위 (컨디션 체크 경고용)
   each?: string;         // '좌우 각' · '앞뒤 각' 표기
+}
+
+export interface Level {
+  name: string;
+  how: string;
+  run?: number; walk?: number; rounds?: number; // 인터벌 단계: 달리기·걷기(초) × 반복
+  target?: number;     // 이 단계로 바꿀 때의 목표 (없으면 범위 시작값)
 }
 
 export interface PlanItem {
@@ -59,6 +72,7 @@ export interface SetLog {
   actual: number;
   done: boolean;
   doneAt?: number;
+  rir?: number;         // 더 할 수 있었던 횟수 (선택 입력)
 }
 
 export interface ItemLog {
@@ -74,6 +88,10 @@ export interface ItemLog {
   rest?: number;
   phase?: Phase;
   lv?: number;             // 그날 수행한 난도 단계
+  subFor?: string;         // 통증으로 바꾼 경우 원래 운동 id
+  stopped?: boolean;       // 통증으로 중단
+  band?: string;           // 사용한 밴드 메모
+  kg?: number;             // 추가 중량(kg)
 }
 
 export type Condition = 'good' | 'tired' | 'pain';
@@ -113,6 +131,14 @@ export interface TimerState {
   label: string;
 }
 
+export interface ExState {
+  lv?: number;          // 현재 난도 단계
+  calibrated?: boolean; // 첫 운동 뒤 목표를 맞췄는지
+  band?: string;        // 마지막으로 쓴 밴드
+  kg?: number;          // 마지막 추가 중량
+  bump?: number;        // (이전 버전)
+}
+
 export interface Settings {
   theme: 'system' | 'light' | 'dark';
   restDefault: number;
@@ -130,7 +156,7 @@ export interface Settings {
   kneeRest?: boolean;    // 무릎 회복 모드: 무릎에 부담 가는 운동 제외
   planStart?: string;    // 8주 프로그램 1주차 월요일
   fullSets?: boolean;    // 적응기 이후 목표 세트로 늘리기에 동의
-  exState?: Record<string, { bump?: number; lv?: number }>; // 운동별 진행 상태 (사용자가 수락한 것만)
+  exState?: Record<string, ExState>; // 운동별 진행 상태 (사용자가 수락한 것만)
   snooze?: Record<string, string>; // 제안 '나중에' (운동 id → 날짜)
   firstPullup: { achieved: boolean; date?: string };
 }

@@ -61,7 +61,7 @@ function Body({ s, halo = 'var(--c-surface-soft)' }: { s: Solved; halo?: string 
   );
 }
 
-function Props({ props, box, layer }: { props: Prop[]; box: [number, number, number, number]; layer: 'back' | 'front' }) {
+function Props({ props, box, layer, s }: { props: Prop[]; box: [number, number, number, number]; layer: 'back' | 'front'; s?: Solved }) {
   const [x0, , w] = box;
   return (
     <g>
@@ -92,6 +92,15 @@ function Props({ props, box, layer }: { props: Prop[]; box: [number, number, num
           }
         }
         switch (p.t) {
+          case 'band': {
+              if (!s) return null;
+              const k = s.knN, k2: P = [s.knN[0] + 2, s.knN[1] + 5];
+              return (
+                <g key={i} stroke={C.hl} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.6}>
+                  <polyline points={pts([p.x1, p.y], [k[0] - 1, k[1] + 4], k2, [p.x2, p.y])} />
+                </g>
+              );
+            }
           case 'ring': return <circle key={i} cx={p.cx} cy={p.cy} r={p.r} fill="none" stroke={C.hl} strokeWidth={1.6} strokeDasharray="4 4" opacity={0.7} />;
           case 'arrow': {
             const ang = (Math.atan2(p.b[1] - p.a[1], p.b[0] - p.a[0]) * 180) / Math.PI;
@@ -161,8 +170,9 @@ export function FigureStill({ art, className = '', halo }: { art?: string; class
   const { s, box } = data;
   return (
     <svg viewBox={box.map((v) => v.toFixed(1)).join(' ')} className={className} aria-hidden="true">
-      <Props props={demo.props} box={box} layer="back" />
+      <Props props={demo.props} box={box} layer="back" s={s} />
       <Body s={s} halo={halo} />
+      <Props props={demo.props} box={box} layer="front" s={s} />
     </svg>
   );
 }
@@ -212,9 +222,9 @@ export function FigureDemo({ art }: { art?: string }) {
     <div className="overflow-hidden rounded-md bg-soft">
       <div className="relative">
         <svg viewBox={box.map((v) => v.toFixed(1)).join(' ')} className="block aspect-[5/3] w-full" role="img" aria-label="동작 그림">
-          <Props props={demo.props} box={box} layer="back" />
+          <Props props={demo.props} box={box} layer="back" s={s} />
           <Body s={s} />
-          <Props props={demo.props} box={box} layer="front" />
+          <Props props={demo.props} box={box} layer="front" s={s} />
         </svg>
         {animated && (
           <button type="button" onClick={() => { setPinned(null); setPlaying((v) => !v); }}

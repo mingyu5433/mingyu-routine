@@ -1,5 +1,6 @@
 import type { Exercise } from '../types';
 import { DETAIL } from './exerciseDetail';
+import { V5_EXERCISES, V5_OVERRIDE } from './v5';
 import { SPEC_EXERCISES, SPEC_OVERRIDE } from './spec';
 import { DEMOS } from '../figure/demos';
 
@@ -368,6 +369,12 @@ for (const e of SPEC_EXERCISES) {
   if (i >= 0) EXERCISES[i] = e; else EXERCISES.push(e);
 }
 for (const e of EXERCISES) if (SPEC_OVERRIDE[e.id]) Object.assign(e, SPEC_OVERRIDE[e.id]);
+// 요청서(2026-11-13) 반영: 본운동 4가지 + 달리기
+for (const e of V5_EXERCISES) {
+  const i = EXERCISES.findIndex((x) => x.id === e.id);
+  if (i >= 0) EXERCISES[i] = e; else EXERCISES.push(e);
+}
+for (const e of EXERCISES) if (V5_OVERRIDE[e.id]) Object.assign(e, V5_OVERRIDE[e.id]);
 // 동작 그림: 운동 id와 같은 이름의 그림이 있으면 그것을 사용
 for (const e of EXERCISES) if (DEMOS[e.id]) e.art = e.id;
 

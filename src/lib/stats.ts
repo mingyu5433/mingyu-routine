@@ -2,10 +2,10 @@ import type { AppState, DayLog, DayPlan, Settings } from '../types';
 import { getEx } from '../data/exercises';
 import { addDays, diffDays, weekStart, weekday } from './date';
 import { restFor } from './store';
-import { PLAN_PHASES, phaseIndex, phaseOfItem, planWeek } from './plan';
+import { phaseOfItem } from './plan';
 
 export const daySets = (log?: DayLog) => {
-  const sets = log?.items.flatMap((i) => (i.optional ? i.sets.filter((s) => s.done) : i.sets)) ?? [];
+  const sets = log?.items.flatMap((i) => (i.optional || i.stopped ? i.sets.filter((s) => s.done) : i.sets)) ?? [];
   return { total: sets.length, done: sets.filter((s) => s.done).length };
 };
 
@@ -39,11 +39,15 @@ export function estimateMinutes(log: DayLog, settings: Settings): [number, numbe
   return [lo, hi];
 }
 
-/** 8주 프로그램 진행 단계 */
-export function phaseOf(state: AppState, today: string) {
-  const week = planWeek(state, today);
-  const idx = phaseIndex(Math.max(1, week));
-  return { week, idx, phase: PLAN_PHASES[idx], adapting: week <= 2, before: week < 1 };
+/** 운동별 성장 기록: 본운동 세션마다 세트 기록 · 합계 · 난도 (오래된 순) */
+export function growthSeries(state: AppState, exId: string) {
+  return Object.keys(state.logs).sort().flatMap((d) => {
+    const it = state.logs[d].items.find((i) => i.exerciseId === exId && !i.test && phaseOfItem(i) === 'main');
+    if (!it) return [];
+    const done = it.sets.filter((x) => x.done);
+    if (!done.length) return [];
+    return [{ d, sets: done.map((x) => x.actual), total: done.reduce((a, x) => a + x.actual, 0), best: Math.max(...done.map((x) => x.actual)), lv: it.lv, band: it.band, kg: it.kg, stopped: !!it.stopped }];
+  });
 }
 
 // ── 통계 화면용 ──────────────────────────────────────
@@ -230,7 +234,7 @@ export function weeklySeries(state: AppState, today: string, exId?: string) {
 }
 
 // ── 월간 달력 ───────────────────────────────────────────
-const UPPER = new Set(['pushup', 'incline-pushup', 'assisted-hang', 'scap-pullup', 'foot-pullup', 'negative-pullup']);
+const UPPER = new Set(['tyson-pushup', 'band-pullup', 'pushup', 'incline-pushup', 'assisted-hang', 'scap-pullup', 'foot-pullup', 'negative-pullup']);
 const LOWER = new Set(['squat', 'hip-bridge']);
 
 /** 그날 실제로 완료한 운동 기준의 종류 라벨 */
@@ -239,6 +243,7 @@ export function dayKinds(log?: DayLog): string[] {
   const kinds: string[] = [];
   if ([...done].some((id) => UPPER.has(id))) kinds.push('상체');
   if ([...done].some((id) => LOWER.has(id))) kinds.push('하체');
+  if (done.has('run-interval')) kinds.push('달리기');
   if (done.has('brisk-walk')) kinds.push('걷기');
   if (kinds.length === 0 && done.size > 0) kinds.push(done.has('deadbug') ? '코어' : done.has('light-stretch') ? '스트레칭' : '준비');
   return kinds;
@@ -252,7 +257,7 @@ export function monthSummary(state: AppState, y: number, m: number) {
     const log = state.logs[d];
     sets += daySets(log).done;
     if (completion(log) === 100) full++;
-    for (const i of log.items) if (i.exerciseId === 'brisk-walk') for (const s of i.sets) if (s.done) walkMin += s.actual;
+    for (const i of log.items) if (i.exerciseId === 'brisk-walk' || i.exerciseId === 'run-interval') for (const s of i.sets) if (s.done) walkMin += s.actual;
   }
   return { days, sets, walkMin, full };
 }
